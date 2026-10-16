@@ -1,0 +1,8 @@
+/node_modules
+/dist
+/Audiobooks
+/.tide
+/.idea
+/venv
+/.venv
+/uploads

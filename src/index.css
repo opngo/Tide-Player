@@ -1,0 +1,145 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  * {
+    border-width: 0px !important;
+    outline: none !important;
+    box-shadow: none;
+  }
+
+  body {
+    font-family: 'Geist', 'Plus Jakarta Sans', 'Instrument Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    background-color: #000000;
+    color: #f8fafc;
+    overflow: hidden;
+    letter-spacing: -0.015em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  .font-mono,
+  .tabular-nums {
+    font-family: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .font-serif-editorial {
+    font-family: 'Newsreader', Georgia, serif;
+  }
+
+  /* Soft ambient elevation (no outlines) */
+  .ambient-surface {
+    background: rgba(255, 255, 255, 0.045);
+    backdrop-filter: blur(28px);
+    -webkit-backdrop-filter: blur(28px);
+  }
+
+  .ambient-surface-hover:hover {
+    background: rgba(255, 255, 255, 0.085);
+  }
+
+  .ambient-popover {
+    background: rgba(12, 12, 14, 0.92);
+    backdrop-filter: blur(40px);
+    -webkit-backdrop-filter: blur(40px);
+    box-shadow: 0 32px 80px -16px rgba(0, 0, 0, 0.85) !important;
+  }
+
+  /* Custom range sliders — clean, borderless */
+  input[type='range'] {
+    -webkit-appearance: none;
+    appearance: none;
+    background: rgba(255, 255, 255, 0.12);
+    height: 4px;
+    border-radius: 999px;
+    cursor: pointer;
+  }
+
+  input[type='range']::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 999px;
+    background: #ffffff;
+    cursor: pointer;
+    transition: transform 0.18s var(--ease-spring);
+  }
+
+  input[type='range']::-webkit-slider-thumb:hover {
+    transform: scale(1.25);
+  }
+
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.25);
+  }
+}
+
+@keyframes floatSlow {
+  0%, 100% { transform: translateY(0px) scale(1); }
+  50% { transform: translateY(-6px) scale(1.012); }
+}
+
+@keyframes fadeSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-float-slow {
+  animation: floatSlow 7s ease-in-out infinite;
+}
+
+.animate-enter {
+  animation: fadeSlideUp 0.32s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes slickBillboardLeft {
+  0% {
+    transform: translate3d(0%, 0, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+@keyframes slickBillboardRight {
+  0% {
+    transform: translate3d(-50%, 0, 0);
+  }
+  100% {
+    transform: translate3d(0%, 0, 0);
+  }
+}
+
+.animate-billboard-left {
+  display: inline-flex;
+  width: max-content;
+  animation: slickBillboardLeft 38s linear infinite;
+}
+
+.animate-billboard-right {
+  display: inline-flex;
+  width: max-content;
+  animation: slickBillboardRight 46s linear infinite;
+}

@@ -1,0 +1,28 @@
+version: "3.9"
+
+services:
+  tide-player:
+    build: .
+    container_name: tide-player
+    ports:
+      - "8443:80"
+    volumes:
+      - ./audiobooks:/Media/Audiobooks:ro
+    restart: unless-stopped
+
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: tide-qbittorrent
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+      - WEBUI_PORT=8080
+    volumes:
+      - ./qbit-config:/config
+      - ./audiobooks:/Media/Audiobooks
+    ports:
+      - "8080:8080"
+      - "6881:6881"
+      - "6881:6881/udp"
+    restart: unless-stopped
