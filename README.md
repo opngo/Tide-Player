@@ -3,6 +3,8 @@
 
 <p align="center">
   <img src="build-resources/icon.png" alt="Alt Text" width="20%">
+  ![Electron.js](https://shields.io)
+
 </p>
 
 ---
