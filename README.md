@@ -2,7 +2,7 @@
 
 
 <p align="center">
-  <img src="build-resources/icon.png" alt="Alt Text">
+  <img src="build-resources/icon.png" alt="Alt Text" width="20%">
 </p>
 
 
