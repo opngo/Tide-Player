@@ -75,6 +75,7 @@ import {
   findActiveChapterIndex,
 } from './components/ProgressBar';
 import { ReactBitsClickSpark } from './components/ReactBitsComponents';
+import { ElectronTitleBar } from './components/ElectronTitleBar';
 
 const ALL_BG_TYPES: BgType[] = [
   'aurora',
@@ -1502,6 +1503,51 @@ export const App: React.FC = () => {
     isSlickMode,
   ]);
 
+  const [showShowcaseModal, setShowShowcaseModal] = useState(false);
+
+  // Listen to Electron Global Media Keys & Tray actions
+  useEffect(() => {
+    if (!window.tideElectron?.onMediaKey) return;
+    return window.tideElectron.onMediaKey((action) => {
+      if (action === 'play-pause') handleTogglePlay();
+      else if (action === 'next-chapter') handleNextChapter();
+      else if (action === 'prev-chapter') handlePrevChapter();
+      else if (action === 'toggle-slick') {
+        setActiveTab('player');
+        setIsSlickMode((s) => !s);
+      }
+    });
+  }, [handleTogglePlay, handleNextChapter, handlePrevChapter]);
+
+  const handleNativeFolderPicked = useCallback(
+    async (folderPath: string) => {
+      try {
+        const resp = await fetch('/api/fs/scan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: folderPath, mode: 'auto-root' }),
+        });
+        const data = await resp.json();
+        if (resp.ok && Array.isArray(data.books) && data.books.length > 0) {
+          setBooks((prev) => {
+            const byId = new Map(prev.map((b) => [b.id, b]));
+            data.books.forEach((b: Book) => byId.set(b.id, b));
+            return Array.from(byId.values());
+          });
+          setWatchedRoots((prev) =>
+            prev.includes(folderPath) ? prev : [...prev, folderPath]
+          );
+          showToast(`Imported ${data.books.length} from ${folderPath}`);
+        } else {
+          showToast(`Scanned ${folderPath}`);
+        }
+      } catch {
+        showToast('Failed to scan folder');
+      }
+    },
+    [showToast]
+  );
+
   const fontClass =
     fontFamily === 'newsreader'
       ? 'font-[Newsreader,serif]'
@@ -1620,6 +1666,65 @@ export const App: React.FC = () => {
         coverUrl={currentBook.cover}
         isPlaying={isPlaying}
       />
+
+      {/* Frameless Electron Desktop Title Bar */}
+      <ElectronTitleBar
+        visible={!isSlickMode && !isImmersive}
+        accentColor={activePalette.vibrant}
+        currentBookTitle={currentBook.title}
+        isPlaying={isPlaying}
+        onNativeFolderPicked={handleNativeFolderPicked}
+        onOpenFolderScanner={() => {
+          setActiveTab('library');
+          setExternalScannerMode('auto-root');
+        }}
+        onOpenShowcaseSite={() => setShowShowcaseModal(true)}
+      />
+
+      {/* Minimalist GitHub Showcase Website Preview Modal */}
+      {showShowcaseModal && (
+        <div
+          className="fixed inset-0 z-[95] bg-black/80 backdrop-blur-2xl flex flex-col animate-enter"
+          onClick={() => setShowShowcaseModal(false)}
+        >
+          <div
+            className="flex items-center justify-between px-5 py-2.5 bg-zinc-950/90"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-2.5">
+              <span
+                className="w-2 h-2 rounded-full"
+                style={{ backgroundColor: activePalette.vibrant }}
+              />
+              <span className="text-xs font-mono text-white/80">
+                docs/index.html · GitHub Pages Showcase Site
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <a
+                href="/showcase/index.html"
+                target="_blank"
+                rel="noreferrer"
+                className="px-3 py-1 rounded-full bg-white/10 hover:bg-white/20 text-[11px] font-mono text-white transition-colors"
+              >
+                Open Full Page
+              </a>
+              <button
+                onClick={() => setShowShowcaseModal(false)}
+                className="px-3 py-1 rounded-full bg-white/10 hover:bg-rose-500/30 text-[11px] font-mono text-white/80 hover:text-white transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+          <iframe
+            src="/showcase/index.html"
+            title="Tide GitHub Showcase Site"
+            className="flex-1 w-full bg-[#04060c]"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
 
       {/* Minimal Toast */}
       {toastText && (

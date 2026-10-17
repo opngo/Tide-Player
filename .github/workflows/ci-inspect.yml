@@ -1,0 +1,87 @@
+name: CI / CD Inspection, Typecheck & Audio Smoke Suite
+
+on:
+  push:
+    branches:
+      - main
+      - '**'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Static Analysis, TypeScript Check & Invariant Audit
+  # ---------------------------------------------------------------------------
+  static-inspection:
+    name: TypeScript & Architectural Invariant Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Dependencies
+        run: npm ci || npm install
+
+      - name: TypeScript Strict Compiler Check
+        run: npm run typecheck
+
+      - name: Build Frontend & Embedded API Server
+        run: npm run build:all
+
+      - name: Run Full CI/CD Verification & API Smoke Suite
+        run: npm run test:ci
+
+      - name: Bundle Size & Asset Footprint Inspection
+        run: |
+          echo "=== Production Web Bundle (dist/) ==="
+          du -sh dist dist/assets
+          ls -lh dist/assets
+          echo "=== Embedded Electron API Bundle (dist-server/) ==="
+          ls -lh dist-server
+
+  # ---------------------------------------------------------------------------
+  # 2. Cross-Platform Build & API Smoke Matrix (Ubuntu / Windows / macOS)
+  # ---------------------------------------------------------------------------
+  cross-platform-smoke:
+    name: Matrix Smoke (${{ matrix.os }} · Node ${{ matrix.node }})
+    needs: static-inspection
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node: [20, 22]
+        exclude:
+          - os: windows-latest
+            node: 20
+          - os: macos-latest
+            node: 20
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - name: Install Dependencies
+        run: npm ci || npm install
+
+      - name: Build Production Bundles
+        run: npm run build:all
+
+      - name: Run Standalone API & Invariant Verification
+        run: npm run test:ci

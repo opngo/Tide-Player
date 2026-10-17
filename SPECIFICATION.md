@@ -107,3 +107,26 @@ All animated shader backgrounds run on hardware-accelerated **WebGL GLSL fragmen
   - Tracks total listening hours, active day streak, indexed books/chapters, disk usage, average playback speed, 24-hour time-of-day distribution bars, and per-book completion bars.
 - **Built-In Documentation, Keyboard Shortcuts & Packaging Guide**:
   - Interactive reference for all keyboard shortcuts, free metadata APIs, `~/.tide/all.json` architecture, and one-click copyable build commands for **Local Dev**, **Tauri v2 Native Desktop (`.dmg` / `.msi` / `.AppImage`)**, **Electron**, and **Docker Compose**.
+
+---
+
+## 7. Electron Desktop UI, Multi-OS Release Workflows & Minimalist GitHub Showcase Site
+
+### 7.1 Electron Desktop Architecture (`electron/main.cjs`, `electron/preload.cjs`, `ElectronTitleBar.tsx`)
+- **Embedded Local HTTP/API Server**: On launch, `electron/main.cjs` mounts `dist-server/apiPlugin.mjs` (`createTideApiMiddleware()`) and `dist/` on an ephemeral `127.0.0.1` loopback port so `~/.tide/all.json` persistence, HTTP 206 byte-range audio streaming (`/api/fs/stream`), `.m4b` `chpl` chapter parsing, Audnexus chapter sync, and qBittorrent / AudioBookBay APIs work natively inside the desktop binary with zero external server required.
+- **Frameless Window Chrome (`src/components/ElectronTitleBar.tsx`)**: Zero-outline draggable header (`-webkit-app-region: drag`) with Always-on-Top pin, compact Mini-Player window resize (`420×128`), native OS directory picker (`dialog.showOpenDialog`),Minimize/Maximize/Close controls, system tray menu, and global hardware media keys (`MediaPlayPause`, `MediaNextTrack`, `MediaPreviousTrack`).
+
+### 7.2 Automated Multi-Platform Packaging & CI/CD Workflows (`.github/workflows/`)
+- **`electron-release.yml` (`electron-builder.yml`)**:
+  - **Windows (`windows-latest`)**: Builds **NSIS `.exe` installer** (`Tide-Setup-${version}-x64.exe` with `oneClick: false`, custom install directory selection, Desktop & Start Menu shortcuts) and portable `.zip`.
+  - **macOS (`macos-latest`)**: Builds Universal/multi-arch `.dmg` and `.zip` bundles (`x64` & `arm64`).
+  - **Linux (`ubuntu-latest`)**: Builds `.AppImage`, `.deb`, and `.tar.gz` packages (`x64`).
+  - **GitHub Releases**: Generates `SHA256SUMS.txt` and publishes all platform installers to GitHub Releases via `softprops/action-gh-release@v2`.
+- **`ci-inspect.yml`**: Runs `npm run typecheck`, `npm run build:all`, bundle size audit, and `npm run test:ci` (`scripts/ci-verify.mjs`) across Ubuntu, Windows, and macOS.
+- **`pages.yml`**: Deploys the static minimalist showcase site (`docs/index.html`) to GitHub Pages.
+- **`docker-publish.yml`**: Builds the Docker image, executes a live HTTP 200 container smoke test, and publishes to `ghcr.io`.
+- **`codeql-security.yml`**: Runs CodeQL static analysis, Electron context-isolation verification, and dependency security audits.
+
+### 7.3 Static Minimalist GitHub Showcase Website (`docs/index.html` & `/showcase/index.html`)
+- Single-file, zero-outline static showcase site matching Tide's dark atmospheric aesthetic (`#04060c`), featuring an interactive chapter-divided seekbar with capsule-aligned playhead dot, circular Cover Radial FFT preview, Screen Curtain toggle, Slick Mode (`L`) billboard marquee, and direct multi-OS release download cards.
+

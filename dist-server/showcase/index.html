@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Tide — Minimalist Audiobook Player</title>
+  <meta name="description" content="Minimalist audiobook player for desktop and web." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Inter:wght@300;400;500&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #030712;
+      --bg-deep: #071126;
+      --surface: rgba(14, 30, 64, 0.28);
+      --surface-hover: rgba(56, 189, 248, 0.08);
+      --line: rgba(56, 189, 248, 0.13);
+      --line-strong: rgba(125, 211, 252, 0.34);
+      --text: #f0f6fc;
+      --muted: #8b9bb4;
+      --dim: #4b5e7a;
+      --blue-dark: #1d4ed8;
+      --blue-light: #38bdf8;
+      --blue-ice: #7dd3fc;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      scroll-behavior: smooth;
+    }
+
+    body {
+      background: radial-gradient(circle at 50% 0%, var(--bg-deep) 0%, var(--bg) 68%);
+      overflow-x: hidden;
+      min-height: 100vh;
+    }
+
+    ::selection {
+      background: rgba(56, 189, 248, 0.22);
+      color: #ffffff;
+    }
+
+    /* Subtle Parallax Dark/Light Blue Backdrop */
+    .bg-stage {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .bg-glow {
+      position: absolute;
+      width: min(85vw, 720px);
+      height: min(85vw, 720px);
+      border-radius: 50%;
+      background: radial-gradient(
+        circle,
+        rgba(29, 78, 216, 0.18) 0%,
+        rgba(56, 189, 248, 0.07) 42%,
+        transparent 70%
+      );
+      filter: blur(48px);
+      will-change: transform;
+    }
+
+    .bg-rings {
+      width: min(92vw, 840px);
+      height: min(92vw, 840px);
+      will-change: transform;
+    }
+
+    /* Thin 1px Blue-Tinted Architectural Frame */
+    .frame {
+      position: relative;
+      z-index: 1;
+      max-width: 920px;
+      margin: 0 auto;
+      border-left: 1px solid var(--line);
+      border-right: 1px solid var(--line);
+    }
+
+    /* 1. FULL-VIEWPORT HERO: Prominent "Tide", Short Description, Download + Copy GitHub URL */
+    .hero-screen {
+      min-height: 100vh;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 32px 20px;
+      position: relative;
+      border-bottom: 1px solid var(--line);
+      text-align: center;
+    }
+
+    .hero-wordmark-wrap {
+      will-change: transform, opacity;
+      margin-bottom: 14px;
+    }
+
+    .hero-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(78px, 19vw, 184px);
+      font-weight: 600;
+      letter-spacing: -0.065em;
+      line-height: 0.92;
+      color: var(--text);
+      user-select: none;
+    }
+
+    .hero-dot {
+      display: inline-block;
+      width: clamp(10px, 2vw, 18px);
+      height: clamp(10px, 2vw, 18px);
+      border-radius: 50%;
+      background: var(--blue-light);
+      margin-left: 4px;
+      box-shadow: 0 0 24px rgba(56, 189, 248, 0.75);
+      vertical-align: baseline;
+    }
+
+    .hero-desc {
+      font-size: clamp(14px, 2.2vw, 16px);
+      font-weight: 300;
+      color: var(--muted);
+      max-width: 420px;
+      line-height: 1.55;
+      margin-bottom: 34px;
+      will-change: transform, opacity;
+    }
+
+    .hero-actions {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      width: 100%;
+      max-width: 460px;
+      will-change: transform, opacity;
+    }
+
+    .btn-action {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      height: 44px;
+      padding: 0 20px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: var(--text);
+      background: var(--surface);
+      border: 1px solid var(--line-strong);
+      border-radius: 999px;
+      text-decoration: none;
+      cursor: pointer;
+      transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+      white-space: nowrap;
+    }
+
+    .btn-action:hover {
+      background: var(--surface-hover);
+      border-color: var(--blue-light);
+      transform: translateY(-1px);
+    }
+
+    .btn-action.primary {
+      background: linear-gradient(135deg, rgba(29, 78, 216, 0.38), rgba(56, 189, 248, 0.18));
+      border-color: var(--blue-light);
+      color: #ffffff;
+    }
+
+    .btn-action svg {
+      width: 14px;
+      height: 14px;
+      stroke: var(--blue-ice);
+      flex-shrink: 0;
+    }
+
+    .scroll-cue {
+      position: absolute;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--dim);
+      will-change: opacity;
+    }
+
+    .scroll-line {
+      width: 1px;
+      height: 28px;
+      background: linear-gradient(180deg, var(--blue-light), transparent);
+    }
+
+    /* Section Header Bar */
+    .bar-label {
+      display: flex;
+      justify-content: space-between;
+      padding: 11px 24px;
+      border-bottom: 1px solid var(--line);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--dim);
+      background: rgba(7, 17, 38, 0.35);
+    }
+
+    /* 2. RELEASES BAR */
+    .downloads-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .dl-cell {
+      padding: 24px 22px;
+      border-right: 1px solid var(--line);
+      text-decoration: none;
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 16px;
+      transition: background 0.2s ease;
+      will-change: transform, opacity;
+    }
+
+    .dl-cell:last-child {
+      border-right: none;
+    }
+
+    .dl-cell:hover {
+      background: var(--surface-hover);
+    }
+
+    .dl-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .dl-name {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    .dl-pill {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: var(--blue-ice);
+      border: 1px solid var(--line);
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: rgba(29, 78, 216, 0.16);
+    }
+
+    .dl-cell:hover .dl-pill {
+      border-color: var(--blue-light);
+    }
+
+    .dl-meta {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10.5px;
+      color: var(--muted);
+    }
+
+    /* 3. FEATURE LIST (JOT NOTES) */
+    .jot-wrap {
+      padding: 44px 28px 56px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .jot-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+    }
+
+    .jot-card {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 20px 22px;
+      background: rgba(7, 17, 38, 0.28);
+      transition: border-color 0.2s ease;
+      will-change: transform, opacity;
+    }
+
+    .jot-card:hover {
+      border-color: var(--line-strong);
+    }
+
+    .jot-head {
+      display: flex;
+      justify-content: space-between;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--blue-ice);
+      padding-bottom: 10px;
+      margin-bottom: 12px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .jot-head span:last-child {
+      color: var(--blue-light);
+    }
+
+    .jot-ul {
+      list-style: none;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 7px;
+    }
+
+    .jot-ul li {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11.5px;
+      color: #d8e4f2;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
+
+    .jot-ul li::before {
+      content: '—';
+      color: var(--blue-light);
+    }
+
+    footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 18px 24px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10.5px;
+      color: var(--dim);
+    }
+
+    footer a {
+      color: var(--blue-ice);
+      text-decoration: none;
+    }
+
+    /* Mobile-First Responsive Breakpoints */
+    @media (max-width: 780px) {
+      .frame {
+        border-left: none;
+        border-right: none;
+      }
+      .downloads-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      .dl-cell:nth-child(2) {
+        border-right: none;
+      }
+      .dl-cell:nth-child(1),
+      .dl-cell:nth-child(2) {
+        border-bottom: 1px solid var(--line);
+      }
+      .jot-grid {
+        grid-template-columns: 1fr;
+      }
+      .jot-wrap {
+        padding: 32px 18px 40px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .hero-actions {
+        flex-direction: column;
+        max-width: 280px;
+      }
+      .btn-action {
+        width: 100%;
+      }
+      .downloads-grid {
+        grid-template-columns: 1fr;
+      }
+      .dl-cell {
+        border-right: none;
+        border-bottom: 1px solid var(--line);
+      }
+      .dl-cell:last-child {
+        border-bottom: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Scroll-Reversible Dark Blue & Light Blue Geometric Backdrop -->
+  <div class="bg-stage" aria-hidden="true">
+    <div class="bg-glow" id="bg-glow"></div>
+    <svg class="bg-rings" id="bg-rings" viewBox="0 0 600 600" fill="none">
+      <circle cx="300" cy="300" r="145" stroke="rgba(56,189,248,0.09)" stroke-width="1" />
+      <circle cx="300" cy="300" r="225" stroke="rgba(29,78,216,0.16)" stroke-width="1" stroke-dasharray="2 8" />
+      <circle cx="300" cy="300" r="292" stroke="rgba(56,189,248,0.05)" stroke-width="1" />
+    </svg>
+  </div>
+
+  <main class="frame">
+    <!-- 1. FULL VIEWPORT HERO: Prominent "Tide", Short Description, Download + Copy GitHub URL -->
+    <section class="hero-screen">
+      <div class="hero-wordmark-wrap" id="hero-wordmark">
+        <h1 class="hero-title">Tide<span class="hero-dot"></span></h1>
+      </div>
+
+      <p class="hero-desc" id="hero-desc">
+        Minimalist audiobook player for desktop and web.
+      </p>
+
+      <div class="hero-actions" id="hero-actions">
+        <a href="#downloads" class="btn-action primary" id="download-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3v12m0 0l-4-4m4 4l4-4" />
+            <path d="M4 19h16" />
+          </svg>
+          <span id="download-label">Download</span>
+        </a>
+
+        <button type="button" class="btn-action" id="copy-gh-btn" data-url="https://github.com/tide-player/tide.git">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="9" width="11" height="11" rx="2" />
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+          </svg>
+          <span id="copy-gh-label">Copy GitHub URL</span>
+        </button>
+      </div>
+
+      <div class="scroll-cue" id="scroll-cue">
+        <span>Scroll</span>
+        <div class="scroll-line"></div>
+      </div>
+    </section>
+
+    <!-- 2. RELEASES -->
+    <div class="bar-label">
+      <span>01 // Releases</span>
+      <span>v1.0.0</span>
+    </div>
+
+    <section class="downloads-grid" id="downloads">
+      <a href="https://github.com/tide-player/tide/releases/latest" class="dl-cell">
+        <div class="dl-row">
+          <span class="dl-name">Windows</span>
+          <span class="dl-pill">NSIS .exe</span>
+        </div>
+        <div class="dl-meta">Tide-Setup-x64.exe</div>
+      </a>
+
+      <a href="https://github.com/tide-player/tide/releases/latest" class="dl-cell">
+        <div class="dl-row">
+          <span class="dl-name">macOS</span>
+          <span class="dl-pill">Universal .dmg</span>
+        </div>
+        <div class="dl-meta">arm64 &amp; x64</div>
+      </a>
+
+      <a href="https://github.com/tide-player/tide/releases/latest" class="dl-cell">
+        <div class="dl-row">
+          <span class="dl-name">Linux</span>
+          <span class="dl-pill">AppImage / deb</span>
+        </div>
+        <div class="dl-meta">x86_64 packages</div>
+      </a>
+
+      <a href="https://github.com/tide-player/tide/pkgs/container/tide" class="dl-cell">
+        <div class="dl-row">
+          <span class="dl-name">Docker</span>
+          <span class="dl-pill">GHCR</span>
+        </div>
+        <div class="dl-meta">ghcr.io/tide-player/tide</div>
+      </a>
+    </section>
+
+    <!-- 3. FEATURE LIST (JOT NOTES) -->
+    <div class="bar-label">
+      <span>02 // Features</span>
+      <span>Jot Notes</span>
+    </div>
+
+    <section class="jot-wrap">
+      <div class="jot-grid">
+        <div class="jot-card">
+          <div class="jot-head"><span>Audio</span><span>01</span></div>
+          <ul class="jot-ul">
+            <li>~/.tide/all.json library index</li>
+            <li>Embedded M4B chpl chapters</li>
+            <li>Audnexus chapter timing sync</li>
+            <li>10-band Web Audio equalizer</li>
+            <li>Multi-file chapter timeline</li>
+          </ul>
+        </div>
+
+        <div class="jot-card">
+          <div class="jot-head"><span>Visuals</span><span>02</span></div>
+          <ul class="jot-ul">
+            <li>Slick Mode [L] billboard view</li>
+            <li>10 seekbar styles &amp; chapter split</li>
+            <li>Circular Cover Radial FFT</li>
+            <li>9 WebGL GLSL background shaders</li>
+            <li>Full-screen dark progress curtain</li>
+          </ul>
+        </div>
+
+        <div class="jot-card">
+          <div class="jot-head"><span>Library</span><span>03</span></div>
+          <ul class="jot-ul">
+            <li>Goodreads &amp; iTunes cover search</li>
+            <li>qBittorrent sequential stream</li>
+            <li>AudioBookBay magnet discovery</li>
+            <li>365-day listening heatmap</li>
+            <li>Auto-hiding icon sidebar</li>
+          </ul>
+        </div>
+
+        <div class="jot-card">
+          <div class="jot-head"><span>Desktop</span><span>04</span></div>
+          <ul class="jot-ul">
+            <li>Frameless Electron desktop UI</li>
+            <li>Windows NSIS .exe installer</li>
+            <li>macOS Universal .dmg bundle</li>
+            <li>Linux AppImage &amp; .deb packages</li>
+            <li>Automated GitHub Releases CI</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <span>Tide · MIT</span>
+      <a href="/">Open Web App ↗</a>
+    </footer>
+  </main>
+
+  <script>
+    // 1. OS-aware Download Button label
+    (() => {
+      const ua = navigator.userAgent.toLowerCase();
+      const label = document.getElementById('download-label');
+      if (ua.includes('win')) label.textContent = 'Download · Win .exe';
+      else if (ua.includes('mac')) label.textContent = 'Download · macOS .dmg';
+      else if (ua.includes('linux')) label.textContent = 'Download · Linux';
+    })();
+
+    // 2. Copy GitHub URL Button
+    (() => {
+      const btn = document.getElementById('copy-gh-btn');
+      const label = document.getElementById('copy-gh-label');
+      btn.addEventListener('click', async () => {
+        const url = btn.getAttribute('data-url');
+        try {
+          await navigator.clipboard.writeText(url);
+        } catch {
+          const ta = document.createElement('textarea');
+          ta.value = url;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+        }
+        label.textContent = 'Copied URL ✓';
+        setTimeout(() => {
+          label.textContent = 'Copy GitHub URL';
+        }, 1800);
+      });
+    })();
+
+    // 3. Reversible Scroll Parallax (moves on scroll down, reverses on scroll up)
+    const bgRings = document.getElementById('bg-rings');
+    const bgGlow = document.getElementById('bg-glow');
+    const heroWordmark = document.getElementById('hero-wordmark');
+    const heroDesc = document.getElementById('hero-desc');
+    const heroActions = document.getElementById('hero-actions');
+    const scrollCue = document.getElementById('scroll-cue');
+    const dlCells = Array.from(document.querySelectorAll('.dl-cell'));
+    const jotCards = Array.from(document.querySelectorAll('.jot-card'));
+
+    let targetY = window.scrollY;
+    let smoothY = targetY;
+
+    window.addEventListener('scroll', () => {
+      targetY = window.scrollY;
+    }, { passive: true });
+
+    function clamp(v, min, max) {
+      return Math.max(min, Math.min(max, v));
+    }
+
+    function tick() {
+      smoothY += (targetY - smoothY) * 0.12;
+      const vh = Math.max(window.innerHeight, 500);
+      const heroProgress = clamp(smoothY / (vh * 0.7), 0, 1);
+
+      // Background blue rings & glow rotate/shift reversibly with scroll
+      const rot = smoothY * 0.04;
+      const scale = 1 + heroProgress * 0.16;
+      bgRings.style.transform = `rotate(${rot.toFixed(2)}deg) scale(${scale.toFixed(3)})`;
+      bgGlow.style.transform = `translate3d(0, ${(smoothY * -0.08).toFixed(1)}px, 0) scale(${(1 + heroProgress * 0.12).toFixed(3)})`;
+
+      // Hero parallax lift on scroll down, reverses on scroll up
+      heroWordmark.style.transform = `translate3d(0, ${(-smoothY * 0.22).toFixed(1)}px, 0) scale(${(1 - heroProgress * 0.08).toFixed(3)})`;
+      heroDesc.style.transform = `translate3d(0, ${(-smoothY * 0.14).toFixed(1)}px, 0)`;
+      heroActions.style.transform = `translate3d(0, ${(-smoothY * 0.08).toFixed(1)}px, 0)`;
+      scrollCue.style.opacity = String(clamp(1 - heroProgress * 2.2, 0, 1));
+
+      // Releases cells reversible parallax reveal
+      const dlProgress = clamp((smoothY - vh * 0.15) / (vh * 0.55), 0, 1);
+      dlCells.forEach((cell, idx) => {
+        const y = (1 - dlProgress) * (16 + idx * 6);
+        cell.style.transform = `translate3d(0, ${y.toFixed(1)}px, 0)`;
+        cell.style.opacity = (0.3 + dlProgress * 0.7).toFixed(2);
+      });
+
+      // Jot cards reversible parallax reveal
+      const jotProgress = clamp((smoothY - vh * 0.35) / (vh * 0.6), 0, 1);
+      jotCards.forEach((card, idx) => {
+        const y = (1 - jotProgress) * (22 + idx * 8);
+        card.style.transform = `translate3d(0, ${y.toFixed(1)}px, 0)`;
+        card.style.opacity = (0.25 + jotProgress * 0.75).toFixed(2);
+      });
+
+      requestAnimationFrame(tick);
+    }
+
+    requestAnimationFrame(tick);
+  </script>
+</body>
+</html>

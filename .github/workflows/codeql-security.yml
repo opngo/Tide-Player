@@ -1,0 +1,58 @@
+name: Security, CodeQL & Electron Hardening Audit
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  electron-and-dependency-audit:
+    name: Electron Context Isolation & Dependency Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Dependencies
+        run: npm ci || npm install
+
+      - name: Verify Electron Security Posture (contextIsolation & nodeIntegration)
+        run: |
+          grep -q "contextIsolation: true" electron/main.cjs
+          grep -q "nodeIntegration: false" electron/main.cjs
+          grep -q "contextBridge.exposeInMainWorld" electron/preload.cjs
+          echo "Electron IPC security posture verified"
+
+      - name: Run Production Dependency Audit
+        run: npm audit --omit=dev --audit-level=critical || true
+
+  codeql-analysis:
+    name: CodeQL JavaScript / TypeScript Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3

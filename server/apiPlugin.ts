@@ -2237,3 +2237,27 @@ export function tideApiPlugin(): Plugin {
     },
   };
 }
+
+export function createTideApiMiddleware(): (
+  req: IncomingMessage,
+  res: ServerResponse,
+  next: () => void
+) => Promise<void> {
+  let registered: any = null;
+  const plugin = tideApiPlugin();
+  const configure =
+    typeof plugin.configureServer === 'function'
+      ? plugin.configureServer
+      : (plugin.configureServer as any)?.handler;
+  if (configure) {
+    configure({
+      middlewares: {
+        use(fn: any) {
+          registered = fn;
+        },
+      },
+    } as any);
+  }
+  return registered;
+}
+
