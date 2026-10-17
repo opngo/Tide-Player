@@ -6,7 +6,7 @@
 
 </p>
 
-![GitHub release](https://shields.io)
+![Electron.js](https://shields.io)
 
 ---
 
