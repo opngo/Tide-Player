@@ -1,3 +1,6 @@
+
+<img href="build-resources/icon.png">
+
 # Tide — Minimalist Audiobook Player
 
 A zero-outline, ambient-glass audiobook player inspired by **Spicetify**, **Winamp**, **Plexamp**, **ChatGPT Voice Mode**, and **[React Bits](https://reactbits.dev/)**. Built with React, TypeScript, Tailwind CSS v4, WebGL GLSL Shaders, HTML5 `<audio>` + Howler.js + Web Audio API 10-band DSP, an **Electron Desktop UI** with an embedded local HTTP/API server (`electron/main.cjs`), and a Node/Vite backend for `~/.tide/all.json` indexing, `.m4b` `chpl` chapter extraction, **Audnexus** ASIN chapter sync, live **Goodreads / Apple Books / OpenLibrary / Google Books** cover search, **AudioBookBay** discovery, and **qBittorrent** sequential streaming.
