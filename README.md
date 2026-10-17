@@ -1,5 +1,10 @@
 
-<img href="build-resources/icon.png">
+
+
+<p align="center">
+  ![Alt Text](build-resources/icon.png)
+</p>
+
 
 # Tide — Minimalist Audiobook Player
 
