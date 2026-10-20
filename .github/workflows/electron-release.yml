@@ -1,0 +1,181 @@
+name: Build & Release Electron Desktop Packages (Win NSIS / macOS / Linux)
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*.*.*'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: 'Publish artifacts to a GitHub Release'
+        required: false
+        default: 'true'
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Pre-Release Inspection & Smoke Verification
+  # ---------------------------------------------------------------------------
+  verify-before-package:
+    name: Pre-Package Inspection & Smoke Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Dependencies
+        run: npm ci || npm install
+
+      - name: TypeScript & Production Build (Web + Embedded API Server)
+        run: npm run build:all
+
+      - name: Run Full CI/CD Verification & API Smoke Suite
+        run: npm run test:ci
+
+  # ---------------------------------------------------------------------------
+  # 2. Multi-Platform Electron Packaging Matrix (Windows NSIS, macOS, Linux)
+  # ---------------------------------------------------------------------------
+  package-electron:
+    name: Package Electron (${{ matrix.platform_name }})
+    needs: verify-before-package
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform_name: windows-x64-nsis
+            build_cmd: npx electron-builder --win nsis zip --x64 --publish never
+          - os: macos-latest
+            platform_name: macos-universal-dmg
+            build_cmd: npx electron-builder --mac dmg zip --x64 --arm64 --publish never
+          - os: ubuntu-latest
+            platform_name: linux-x64-packages
+            build_cmd: npx electron-builder --linux AppImage deb tar.gz --x64 --publish never
+
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      ELECTRON_CACHE: ${{ runner.temp }}/electron-cache
+      ELECTRON_BUILDER_CACHE: ${{ runner.temp }}/builder-cache
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Linux Packaging Libraries (rpm / fpm helpers)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libfuse2 rpm
+
+      - name: Install Dependencies
+        run: npm ci || npm install
+
+      - name: Build Production Frontend & Embedded API Server
+        run: npm run build:all
+
+      - name: Build Electron Desktop Installers (${{ matrix.platform_name }})
+        run: ${{ matrix.build_cmd }}
+
+      - name: Inspect Generated Release Artifacts
+        shell: bash
+        run: |
+          echo "=== Packaged Artifacts in release/ ==="
+          ls -lh release/
+          mkdir -p release-upload
+          find release -maxdepth 1 -type f \( \
+            -name "*.exe" -o \
+            -name "*.dmg" -o \
+            -name "*.zip" -o \
+            -name "*.AppImage" -o \
+            -name "*.deb" -o \
+            -name "*.tar.gz" -o \
+            -name "*.yml" -o \
+            -name "*.blockmap" \
+          \) -exec cp {} release-upload/ \;
+          ls -lh release-upload/
+
+      - name: Upload Build Artifacts (${{ matrix.platform_name }})
+        uses: actions/upload-artifact@v4
+        with:
+          name: tide-${{ matrix.platform_name }}
+          path: release-upload/*
+          if-no-files-found: error
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # 3. Publish GitHub Release with Checksums & All OS Installers
+  # ---------------------------------------------------------------------------
+  publish-github-release:
+    name: Publish GitHub Release (Win / macOS / Linux)
+    needs: package-electron
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.create_release == true)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Download All Packaged Platform Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist-SignedReleases
+          merge-multiple: true
+
+      - name: Generate SHA256SUMS.txt & Inspect Release Bundle
+        working-directory: dist-SignedReleases
+        run: |
+          ls -lh
+          sha256sum *.exe *.dmg *.zip *.AppImage *.deb *.tar.gz 2>/dev/null | tee SHA256SUMS.txt || true
+
+      - name: Create or Update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "Tide Desktop ${{ github.ref_name }}"
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          body: |
+            ## Tide · Minimalist Desktop & Web Audiobook Player (${{ github.ref_name }})
+
+            ### Desktop Installers
+            - **Windows (x64)**: `Tide-Setup-*-x64.exe` (Interactive NSIS Installer with custom directory & shortcuts) and `Tide-*-x64.zip`
+            - **macOS (Apple Silicon & Intel)**: `Tide-*-mac-arm64.dmg`, `Tide-*-mac-x64.dmg`, and `.zip` bundles
+            - **Linux (x64)**: `Tide-*-linux-x86_64.AppImage`, `Tide-*-linux-amd64.deb`, and `.tar.gz`
+
+            ### Highlights
+            - Zero-outline UI with frameless Electron desktop chrome, system tray, and hardware media keys
+            - Persistent `~/.tide/all.json` catalog with embedded MP4/M4B `chpl` chapter extraction & Audnexus ASIN chapter sync
+            - 10 seekbar styles with chapter-capsule-aligned playhead dot & physical file segment routing
+            - Real-time 60fps Web Audio FFT visualizers (including circular Cover Radial under-cover glow) and 9 React Bits WebGL shaders
+          files: |
+            dist-SignedReleases/*.exe
+            dist-SignedReleases/*.dmg
+            dist-SignedReleases/*.zip
+            dist-SignedReleases/*.AppImage
+            dist-SignedReleases/*.deb
+            dist-SignedReleases/*.tar.gz
+            dist-SignedReleases/*.yml
+            dist-SignedReleases/SHA256SUMS.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

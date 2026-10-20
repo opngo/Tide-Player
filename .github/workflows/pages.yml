@@ -1,0 +1,54 @@
+name: Deploy Minimalist GitHub Pages Showcase Site
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'docs/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: 'pages'
+  cancel-in-progress: false
+
+jobs:
+  build-pages:
+    name: Verify & Package Static Showcase Site (docs/)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Verify Minimalist Showcase Site Structure
+        run: |
+          test -f docs/index.html
+          test -f docs/.nojekyll
+          grep -q "Tide — Minimalist Audiobook Player" docs/index.html
+          echo "Showcase site verified ($(wc -c < docs/index.html) bytes)"
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Static Showcase Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './docs'
+
+  deploy-pages:
+    name: Publish to GitHub Pages
+    needs: build-pages
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

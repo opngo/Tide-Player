@@ -1,0 +1,53 @@
+{
+  "name": "tide-audiobook-player",
+  "version": "1.0.0",
+  "description": "Tide · Amp — Minimalist desktop & web audiobook player with M4B chapter extraction, Audnexus sync, real-time Web Audio FFT visualizers, and qBittorrent streaming.",
+  "author": "Opngo <Opngo@users.noreply.github.com>",
+  "license": "MIT",
+  "homepage": "https://opngo.github.io/Tide-Player",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Opngo/Tide-Player.git"
+  },
+  "main": "electron/main.cjs",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5173",
+    "typecheck": "tsc -b",
+    "build": "tsc -b && vite build",
+    "build:server": "node scripts/build-electron-server.mjs",
+    "build:all": "npm run build && npm run build:server",
+    "test:ci": "node scripts/ci-verify.mjs",
+    "git:author:opngo": "bash scripts/rewrite-git-author.sh",
+    "preview": "vite preview --host 0.0.0.0 --port 5173",
+    "electron:start": "npm run build:all && electron .",
+    "electron:smoke": "npm run build:all && electron . --smoke-test",
+    "electron:dev": "vite --host 0.0.0.0 --port 5173",
+    "electron:build": "npm run build:all && electron-builder",
+    "electron:pack:dir": "npm run build:all && electron-builder --dir",
+    "electron:pack:win": "npm run build:all && electron-builder --win nsis zip --x64",
+    "electron:pack:mac": "npm run build:all && electron-builder --mac dmg zip --x64 --arm64",
+    "electron:pack:linux": "npm run build:all && electron-builder --linux AppImage deb tar.gz --x64",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
+    "docker:build": "docker build -t tide-audiobook-player ."
+  },
+  "dependencies": {
+    "howler": "^2.2.4",
+    "lucide-react": "^0.475.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.6",
+    "@types/howler": "^2.2.13",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^34.2.0",
+    "electron-builder": "^25.1.8",
+    "tailwindcss": "^4.0.6",
+    "typescript": "~5.6.2",
+    "vite": "^6.1.0"
+  }
+}
