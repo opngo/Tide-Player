@@ -66,12 +66,8 @@ jobs:
           - os: ubuntu-latest
             platform_name: linux-x64-packages
             build_cmd: npx electron-builder --linux AppImage deb tar.gz --x64 --publish never
-
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-      ELECTRON_CACHE: ${{ runner.temp }}/electron-cache
-      ELECTRON_BUILDER_CACHE: ${{ runner.temp }}/builder-cache
-
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -95,6 +91,9 @@ jobs:
         run: npm run build:all
 
       - name: Build Electron Desktop Installers (${{ matrix.platform_name }})
+        env:
+          ELECTRON_CACHE: ${{ runner.temp }}/electron-cache
+          ELECTRON_BUILDER_CACHE: ${{ runner.temp }}/builder-cache
         run: ${{ matrix.build_cmd }}
 
       - name: Inspect Generated Release Artifacts
@@ -103,16 +102,8 @@ jobs:
           echo "=== Packaged Artifacts in release/ ==="
           ls -lh release/
           mkdir -p release-upload
-          find release -maxdepth 1 -type f \( \
-            -name "*.exe" -o \
-            -name "*.dmg" -o \
-            -name "*.zip" -o \
-            -name "*.AppImage" -o \
-            -name "*.deb" -o \
-            -name "*.tar.gz" -o \
-            -name "*.yml" -o \
-            -name "*.blockmap" \
-          \) -exec cp {} release-upload/ \;
+          shopt -s nullglob
+          cp release/*.{exe,dmg,zip,AppImage,deb,tar.gz,yml,blockmap} release-upload/ 2>/dev/null || true
           ls -lh release-upload/
 
       - name: Upload Build Artifacts (${{ matrix.platform_name }})
