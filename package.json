@@ -2,9 +2,13 @@
   "name": "tide-audiobook-player",
   "version": "1.0.0",
   "description": "Tide · Amp — Minimalist desktop & web audiobook player with M4B chapter extraction, Audnexus sync, real-time Web Audio FFT visualizers, and qBittorrent streaming.",
-  "author": "Tide Contributors <maintainers@tide.dev>",
+  "author": "Opngo <Opngo@users.noreply.github.com>",
   "license": "MIT",
-  "homepage": "https://tide-player.github.io/tide",
+  "homepage": "https://opngo.github.io/Tide-Player",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Opngo/Tide-Player.git"
+  },
   "main": "electron/main.cjs",
   "type": "module",
   "scripts": {
@@ -14,6 +18,7 @@
     "build:server": "node scripts/build-electron-server.mjs",
     "build:all": "npm run build && npm run build:server",
     "test:ci": "node scripts/ci-verify.mjs",
+    "git:author:opngo": "bash scripts/rewrite-git-author.sh",
     "preview": "vite preview --host 0.0.0.0 --port 5173",
     "electron:start": "npm run build:all && electron .",
     "electron:smoke": "npm run build:all && electron . --smoke-test",

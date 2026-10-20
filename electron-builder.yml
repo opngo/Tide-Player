@@ -1,6 +1,6 @@
 appId: dev.tide.audiobook
 productName: Tide
-copyright: Copyright © 2026 Tide Contributors
+copyright: Copyright © 2026 Opngo
 
 directories:
   output: release
@@ -52,7 +52,7 @@ mac:
 linux:
   icon: build-resources/icon.png
   category: AudioVideo
-  maintainer: Tide Project <maintainers@tide.dev>
+  maintainer: Opngo <Opngo@users.noreply.github.com>
   synopsis: Minimalist Audiobook Player with M4B Chapter Sync & Real-Time FFT
   artifactName: "${productName}-${version}-linux-${arch}.${ext}"
   target:
@@ -68,4 +68,6 @@ linux:
 
 publish:
   provider: github
+  owner: Opngo
+  repo: Tide-Player
   releaseType: release
