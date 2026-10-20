@@ -76,6 +76,10 @@ import {
 } from './components/ProgressBar';
 import { ReactBitsClickSpark } from './components/ReactBitsComponents';
 import { ElectronTitleBar } from './components/ElectronTitleBar';
+import {
+  registerMediaSessionHandlers,
+  syncFluentFlyoutMediaSession,
+} from './services/mediaSession';
 
 const ALL_BG_TYPES: BgType[] = [
   'aurora',
@@ -229,7 +233,7 @@ export const App: React.FC = () => {
   const [vizConfig, setVizConfig] = useState<VizConfig>(SCENE_PRESETS[0].viz);
   const [progressBarStyle, setProgressBarStyle] =
     useState<ProgressBarStyle>('wave');
-  const [timeMode, setTimeMode] = useState<TimeDisplayMode>('remaining');
+  const [timeMode, setTimeMode] = useState<TimeDisplayMode>('elapsed');
   const [coverShape, setCoverShape] = useState<CoverShape>('circle');
   const [themeMode, setThemeMode] = useState<ThemeMode>('vivid');
   const [colorScheme, setColorScheme] = useState<ColorScheme>('dark');
@@ -746,11 +750,13 @@ export const App: React.FC = () => {
       0,
       latestPositionMsRef.current - seg.startMs
     );
+    const segSpanMs = Math.max(1000, seg.endMs - seg.startMs);
     audioEngine.setBookProfile(
       currentBook.voiceProfile?.basePitchHz || 115,
       currentBook.voiceProfile?.cadenceSpeed || 1.0,
       seg.streamUrl,
-      offsetInFileMs
+      offsetInFileMs,
+      segSpanMs
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -816,7 +822,10 @@ export const App: React.FC = () => {
             fileSegmentsRef.current.find(
               (s) => loopTarget >= s.startMs && loopTarget <= s.endMs
             ) || seg;
-          audioEngine.seekRealFile(Math.max(0, loopTarget - targetSeg.startMs));
+          audioEngine.seekRealFile(
+            Math.max(0, loopTarget - targetSeg.startMs),
+            Math.max(1000, targetSeg.endMs - targetSeg.startMs)
+          );
           return;
         }
       }
@@ -860,7 +869,8 @@ export const App: React.FC = () => {
             book.voiceProfile?.basePitchHz || 115,
             book.voiceProfile?.cadenceSpeed || 1.0,
             targetSeg.streamUrl,
-            Math.max(0, curCh.startMs - targetSeg.startMs)
+            Math.max(0, curCh.startMs - targetSeg.startMs),
+            Math.max(1000, targetSeg.endMs - targetSeg.startMs)
           );
           audioEngine.play();
           return;
@@ -876,7 +886,8 @@ export const App: React.FC = () => {
           book.voiceProfile?.basePitchHz || 115,
           book.voiceProfile?.cadenceSpeed || 1.0,
           nextSeg.streamUrl,
-          0
+          0,
+          Math.max(1000, nextSeg.endMs - nextSeg.startMs)
         );
         setProgressMap((prev) => ({
           ...prev,
@@ -927,6 +938,7 @@ export const App: React.FC = () => {
       activeFileSegRef.current = targetSeg;
 
       const offsetInFileMs = Math.max(0, clamped - targetSeg.startMs);
+      const segSpanMs = Math.max(1000, targetSeg.endMs - targetSeg.startMs);
 
       if (
         targetSeg.index !== prevSeg.index ||
@@ -936,10 +948,11 @@ export const App: React.FC = () => {
           currentBook.voiceProfile?.basePitchHz || 115,
           currentBook.voiceProfile?.cadenceSpeed || 1.0,
           targetSeg.streamUrl,
-          offsetInFileMs
+          offsetInFileMs,
+          segSpanMs
         );
       } else {
-        audioEngine.seekRealFile(offsetInFileMs);
+        audioEngine.seekRealFile(offsetInFileMs, segSpanMs);
       }
 
       setProgressMap((prev) => ({
@@ -1503,8 +1516,6 @@ export const App: React.FC = () => {
     isSlickMode,
   ]);
 
-  const [showShowcaseModal, setShowShowcaseModal] = useState(false);
-
   // Listen to Electron Global Media Keys & Tray actions
   useEffect(() => {
     if (!window.tideElectron?.onMediaKey) return;
@@ -1519,34 +1530,52 @@ export const App: React.FC = () => {
     });
   }, [handleTogglePlay, handleNextChapter, handlePrevChapter]);
 
-  const handleNativeFolderPicked = useCallback(
-    async (folderPath: string) => {
-      try {
-        const resp = await fetch('/api/fs/scan', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ path: folderPath, mode: 'auto-root' }),
-        });
-        const data = await resp.json();
-        if (resp.ok && Array.isArray(data.books) && data.books.length > 0) {
-          setBooks((prev) => {
-            const byId = new Map(prev.map((b) => [b.id, b]));
-            data.books.forEach((b: Book) => byId.set(b.id, b));
-            return Array.from(byId.values());
-          });
-          setWatchedRoots((prev) =>
-            prev.includes(folderPath) ? prev : [...prev, folderPath]
-          );
-          showToast(`Imported ${data.books.length} from ${folderPath}`);
-        } else {
-          showToast(`Scanned ${folderPath}`);
-        }
-      } catch {
-        showToast('Failed to scan folder');
-      }
-    },
-    [showToast]
-  );
+  // Register Windows SMTC / FluentFlyout / OS MediaSession transport handlers
+  useEffect(() => {
+    registerMediaSessionHandlers({
+      onPlay: () => {
+        if (!isPlaying) handleTogglePlay();
+      },
+      onPause: () => {
+        if (isPlaying) handleTogglePlay();
+      },
+      onPrevChapter: () => handlePrevChapter(),
+      onNextChapter: () => handleNextChapter(),
+      onSeekBackward: (sec) => handleSkipSeconds(-Math.abs(sec || 15)),
+      onSeekForward: (sec) => handleSkipSeconds(Math.abs(sec || 30)),
+      onSeekTo: (posSec) => handleSeek(Math.round(posSec * 1000)),
+    });
+  }, [
+    isPlaying,
+    handleTogglePlay,
+    handlePrevChapter,
+    handleNextChapter,
+    handleSkipSeconds,
+    handleSeek,
+  ]);
+
+  // Synchronize actual book cover (rasterized 512x512 PNG) & book/chapter title with Windows SMTC & FluentFlyout
+  const activeChapterObj =
+    currentBook.chapters[
+      findActiveChapterIndex(currentBook.chapters, currentProgress.positionMs)
+    ] || currentBook.chapters[0];
+
+  useEffect(() => {
+    syncFluentFlyoutMediaSession({
+      book: currentBook,
+      chapter: activeChapterObj,
+      isPlaying,
+      positionMs: currentProgress.positionMs,
+      durationMs: currentBook.durationMs,
+      playbackRate: currentProgress.speed || 1,
+    });
+  }, [
+    currentBook,
+    activeChapterObj,
+    isPlaying,
+    Math.floor(currentProgress.positionMs / 2000),
+    currentProgress.speed,
+  ]);
 
   const fontClass =
     fontFamily === 'newsreader'
@@ -1555,7 +1584,7 @@ export const App: React.FC = () => {
       ? 'font-[Plus_Jakarta_Sans,sans-serif]'
       : fontFamily === 'instrument'
       ? 'font-[Instrument_Sans,sans-serif]'
-      : 'font-[Geist,sans-serif]';
+      : 'font-[Satoshi,sans-serif]';
 
   const pillRadius = squareCorners ? 'rounded-none' : 'rounded-xl';
   const radiusClass = squareCorners ? 'rounded-none' : 'rounded-3xl';
@@ -1668,63 +1697,7 @@ export const App: React.FC = () => {
       />
 
       {/* Frameless Electron Desktop Title Bar */}
-      <ElectronTitleBar
-        visible={!isSlickMode && !isImmersive}
-        accentColor={activePalette.vibrant}
-        currentBookTitle={currentBook.title}
-        isPlaying={isPlaying}
-        onNativeFolderPicked={handleNativeFolderPicked}
-        onOpenFolderScanner={() => {
-          setActiveTab('library');
-          setExternalScannerMode('auto-root');
-        }}
-        onOpenShowcaseSite={() => setShowShowcaseModal(true)}
-      />
-
-      {/* Minimalist GitHub Showcase Website Preview Modal */}
-      {showShowcaseModal && (
-        <div
-          className="fixed inset-0 z-[95] bg-black/80 backdrop-blur-2xl flex flex-col animate-enter"
-          onClick={() => setShowShowcaseModal(false)}
-        >
-          <div
-            className="flex items-center justify-between px-5 py-2.5 bg-zinc-950/90"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center gap-2.5">
-              <span
-                className="w-2 h-2 rounded-full"
-                style={{ backgroundColor: activePalette.vibrant }}
-              />
-              <span className="text-xs font-mono text-white/80">
-                docs/index.html · GitHub Pages Showcase Site
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <a
-                href="/showcase/index.html"
-                target="_blank"
-                rel="noreferrer"
-                className="px-3 py-1 rounded-full bg-white/10 hover:bg-white/20 text-[11px] font-mono text-white transition-colors"
-              >
-                Open Full Page
-              </a>
-              <button
-                onClick={() => setShowShowcaseModal(false)}
-                className="px-3 py-1 rounded-full bg-white/10 hover:bg-rose-500/30 text-[11px] font-mono text-white/80 hover:text-white transition-colors"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-          <iframe
-            src="/showcase/index.html"
-            title="Tide GitHub Showcase Site"
-            className="flex-1 w-full bg-[#04060c]"
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
-      )}
+      <ElectronTitleBar visible={!isSlickMode && !isImmersive} />
 
       {/* Minimal Toast */}
       {toastText && (
@@ -1902,7 +1875,7 @@ export const App: React.FC = () => {
             </div>
 
             {/* Center: Pure Icon-Only Navigation Rail (NO words!) */}
-            <nav className="flex-1 flex flex-col items-center justify-center gap-2 overflow-y-auto py-2">
+            <nav className="flex-1 w-full flex flex-col items-center justify-center gap-2 overflow-y-auto overflow-x-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden py-2">
               {(
                 [
                   { id: 'player', label: 'Player', icon: Waves },
@@ -1910,7 +1883,7 @@ export const App: React.FC = () => {
                   { id: 'queue', label: 'Queue', icon: Layers },
                   { id: 'abb-search', label: 'AudioBookBay', icon: Search },
                   { id: 'downloads', label: 'Transfers', icon: ArrowDownToLine },
-                  { id: 'stats', label: 'Heatmap, Stats & Docs', icon: Activity },
+                  { id: 'stats', label: 'Stats', icon: Activity },
                   { id: 'customize', label: 'Settings', icon: Sliders },
                 ] as const
               ).map((item) => {
@@ -1979,19 +1952,23 @@ export const App: React.FC = () => {
               })}
             </nav>
 
-            {/* Bottom: Pin + Mini Cover Avatar (Removed FG button from sidebar -> moved to Settings!) */}
-            <div className="flex flex-col items-center gap-2.5">
-              <button
-                onClick={() => setSidebarPinned((p) => !p)}
-                className={`w-8 h-8 ${pillRadius} flex items-center justify-center transition-colors ${
-                  sidebarPinned
-                    ? 'text-white bg-white/15'
-                    : 'text-white/35 hover:text-white'
-                }`}
-                title={sidebarPinned ? 'Auto-hide sidebar' : 'Pin sidebar'}
-              >
-                <Pin className="w-3.5 h-3.5" />
-              </button>
+            {/* Bottom: Dividing Line + Generous Space + Hover-Only Pin + Mini Cover Avatar */}
+            <div className="flex flex-col items-center gap-3.5 pt-2">
+              <div className="w-6 h-[1px] bg-white/[0.12] rounded-full" />
+
+              <div className="group/pin py-1.5 px-2.5 -my-1 flex items-center justify-center">
+                <button
+                  onClick={() => setSidebarPinned((p) => !p)}
+                  className={`w-8 h-8 ${pillRadius} flex items-center justify-center transition-all duration-300 opacity-0 group-hover/pin:opacity-35 hover:!opacity-65 ${
+                    sidebarPinned
+                      ? 'text-white bg-white/15'
+                      : 'text-white/75 bg-white/[0.04] hover:bg-white/[0.1]'
+                  }`}
+                  title={sidebarPinned ? 'Auto-hide sidebar' : 'Pin sidebar'}
+                >
+                  <Pin className="w-3.5 h-3.5" />
+                </button>
+              </div>
 
               <button
                 onClick={handleTogglePlay}
@@ -2031,6 +2008,8 @@ export const App: React.FC = () => {
               <LandingPage
                 books={books}
                 currentBook={currentBook}
+                palette={activePalette}
+                progressMap={progressMap}
                 isPlaying={isPlaying}
                 positionMs={currentProgress.positionMs}
                 onSelectBook={handleSelectBook}
@@ -2052,6 +2031,7 @@ export const App: React.FC = () => {
               <PlayerView
                 book={currentBook}
                 books={books}
+                palette={activePalette}
                 isPlaying={isPlaying}
                 onTogglePlay={handleTogglePlay}
                 positionMs={currentProgress.positionMs}
@@ -2166,6 +2146,13 @@ export const App: React.FC = () => {
                 onToggleSlickMode={() => setIsSlickMode((s) => !s)}
                 slickTextSpeed={bgConfig.slickTextSpeed ?? 18}
                 fullScreenSeekbar={bgConfig.fullScreenSeekbar ?? true}
+                chapterOnlySeekbar={bgConfig.chapterOnlySeekbar ?? false}
+                onToggleChapterOnlySeekbar={() =>
+                  setBgConfig((prev) => ({
+                    ...prev,
+                    chapterOnlySeekbar: !(prev.chapterOnlySeekbar ?? false),
+                  }))
+                }
                 seekbarWidthPct={bgConfig.seekbarWidthPct ?? 88}
                 squareCorners={squareCorners}
               />
@@ -2248,7 +2235,18 @@ export const App: React.FC = () => {
                   setBooks((prev) =>
                     prev.map((b) => (b.id === updated.id ? updated : b))
                   );
-                  showToast(`Updated ${updated.title}`);
+                  fetch('/api/chapters', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      bookId: updated.id,
+                      title: updated.title,
+                      folderPath: updated.folderPath,
+                      durationMs: updated.durationMs,
+                      chapters: updated.chapters,
+                    }),
+                  }).catch(() => {});
+                  showToast(`Saved ${updated.title} · chapters.json`);
                 }}
                 onLoadRealLibriVox={handleLoadRealLibriVox}
                 externalOpenScannerMode={externalScannerMode}
@@ -2541,7 +2539,7 @@ export const App: React.FC = () => {
                     { id: 'queue', icon: Layers, tip: 'Queue' },
                     { id: 'abb-search', icon: Search, tip: 'AudioBookBay' },
                     { id: 'downloads', icon: ArrowDownToLine, tip: 'Transfers' },
-                    { id: 'stats', icon: Activity, tip: 'Heatmap & Docs' },
+                    { id: 'stats', icon: Activity, tip: 'Stats' },
                     { id: 'customize', icon: Sliders, tip: 'Settings' },
                   ] as const
                 ).map((item) => {
@@ -2592,8 +2590,19 @@ export const App: React.FC = () => {
             setBooks((prev) =>
               prev.map((b) => (b.id === updated.id ? updated : b))
             );
+            fetch('/api/chapters', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                bookId: updated.id,
+                title: updated.title,
+                folderPath: updated.folderPath,
+                durationMs: updated.durationMs,
+                chapters: updated.chapters,
+              }),
+            }).catch(() => {});
             setEditingBook(null);
-            showToast(updated.title);
+            showToast(`${updated.title} · chapters.json`);
           }}
           onClose={() => setEditingBook(null)}
           squareCorners={squareCorners}

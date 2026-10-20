@@ -21,6 +21,7 @@ export class TideAudioEngine {
   private audio: HTMLAudioElement;
   private currentStreamUrl: string = '';
   private pendingSeekSec: number | null = null;
+  private currentSegmentSpanSec: number | null = null;
   private lastManualSeekPerfTime: number = 0;
   private lastManualSeekTargetSec: number | null = null;
   private isLoadingStream: boolean = false;
@@ -69,10 +70,38 @@ export class TideAudioEngine {
 
   constructor() {
     this.audio = new Audio();
+    this.audio.id = 'tide-smtc-audio-element';
     this.audio.preload = 'auto';
     this.audio.crossOrigin = 'anonymous';
+    this.audio.style.display = 'none';
+    if (typeof document !== 'undefined' && document.body) {
+      document.body.appendChild(this.audio);
+    } else if (typeof window !== 'undefined') {
+      window.addEventListener('DOMContentLoaded', () => {
+        if (document.body && !document.getElementById('tide-smtc-audio-element')) {
+          document.body.appendChild(this.audio);
+        }
+      });
+    }
     this.timeData.fill(128);
     this.setupAudioElementListeners();
+  }
+
+  private resolvePhysicalSeekSec(logicalSec: number, durSec: number): number {
+    const validDur =
+      typeof durSec === 'number' && !isNaN(durSec) && isFinite(durSec) && durSec > 0;
+    if (!validDur) return Math.max(0, logicalSec);
+
+    const segSpanSec = this.currentSegmentSpanSec;
+    if (
+      typeof segSpanSec === 'number' &&
+      segSpanSec > 1 &&
+      Math.abs(durSec - segSpanSec) > segSpanSec * 0.15
+    ) {
+      const scaled = (logicalSec / segSpanSec) * durSec;
+      return Math.max(0, Math.min(durSec - 0.05, scaled));
+    }
+    return Math.max(0, Math.min(durSec - 0.05, logicalSec));
   }
 
   private applyPendingSeekIfReady(): boolean {
@@ -80,11 +109,9 @@ export class TideAudioEngine {
     if (this.audio.readyState < 1) return false;
     try {
       const dur = this.audio.duration;
-      const target =
-        typeof dur === 'number' && !isNaN(dur) && isFinite(dur) && dur > 0
-          ? Math.max(0, Math.min(dur - 0.05, this.pendingSeekSec))
-          : Math.max(0, this.pendingSeekSec);
+      const target = this.resolvePhysicalSeekSec(this.pendingSeekSec, dur);
       this.audio.currentTime = target;
+      this.lastManualSeekTargetSec = target;
       if (Math.abs(this.audio.currentTime - target) < 1.5 || target === 0) {
         this.pendingSeekSec = null;
         if (typeof dur === 'number' && !isNaN(dur) && isFinite(dur) && dur > 0) {
@@ -435,14 +462,21 @@ export class TideAudioEngine {
     _basePitchHz: number = 115,
     _cadenceSpeed: number = 1.0,
     streamUrl?: string,
-    initialSeekMs?: number
+    initialSeekMs?: number,
+    segmentSpanMs?: number
   ): void {
     const finalSrc = this.normalizeStreamUrl(streamUrl);
+    if (typeof segmentSpanMs === 'number' && segmentSpanMs > 0) {
+      this.currentSegmentSpanSec = segmentSpanMs / 1000;
+    }
 
     if (typeof initialSeekMs === 'number' && initialSeekMs >= 0) {
       this.pendingSeekSec = initialSeekMs / 1000;
       this.lastManualSeekPerfTime = performance.now();
-      this.lastManualSeekTargetSec = this.pendingSeekSec;
+      this.lastManualSeekTargetSec = this.resolvePhysicalSeekSec(
+        this.pendingSeekSec,
+        this.audio.duration
+      );
     }
 
     if (finalSrc !== this.currentStreamUrl) {
@@ -582,23 +616,27 @@ export class TideAudioEngine {
     this.progressRafId = requestAnimationFrame(tick);
   }
 
-  public seekRealFile(ms: number): void {
-    const targetSec = Math.max(0, ms / 1000);
-    this.pendingSeekSec = targetSec;
+  public seekRealFile(ms: number, segmentSpanMs?: number): void {
+    if (typeof segmentSpanMs === 'number' && segmentSpanMs > 0) {
+      this.currentSegmentSpanSec = segmentSpanMs / 1000;
+    }
+    const logicalSec = Math.max(0, ms / 1000);
+    this.pendingSeekSec = logicalSec;
     this.lastManualSeekPerfTime = performance.now();
-    this.lastManualSeekTargetSec = targetSec;
 
     const durSec = this.audio.duration;
     const validDur =
       typeof durSec === 'number' && !isNaN(durSec) && isFinite(durSec) && durSec > 0;
+    const physicalTargetSec = this.resolvePhysicalSeekSec(logicalSec, durSec);
+    this.lastManualSeekTargetSec = physicalTargetSec;
 
     if (!this.isLoadingStream && this.audio.readyState >= 1) {
       try {
-        const clampedSec = validDur
-          ? Math.max(0, Math.min(durSec - 0.05, targetSec))
-          : targetSec;
-        this.audio.currentTime = clampedSec;
-        if (Math.abs(this.audio.currentTime - clampedSec) < 1.5 || clampedSec === 0) {
+        this.audio.currentTime = physicalTargetSec;
+        if (
+          Math.abs(this.audio.currentTime - physicalTargetSec) < 1.5 ||
+          physicalTargetSec === 0
+        ) {
           this.pendingSeekSec = null;
         }
       } catch {
@@ -607,7 +645,10 @@ export class TideAudioEngine {
     }
 
     if (validDur) {
-      this.currentPlayheadRatio = Math.max(0, Math.min(1, targetSec / durSec));
+      this.currentPlayheadRatio = Math.max(
+        0,
+        Math.min(1, physicalTargetSec / durSec)
+      );
     }
   }
 

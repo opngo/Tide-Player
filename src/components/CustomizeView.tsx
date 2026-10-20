@@ -310,10 +310,10 @@ const COVER_SHAPE_OPTIONS: DropdownOption<CoverShape>[] = [
 ];
 
 const FONT_OPTIONS: DropdownOption<FontChoice>[] = [
-  { id: 'geist', label: 'Inter Sans' },
+  { id: 'geist', label: 'Satoshi' },
   { id: 'jakarta', label: 'Space Grotesk' },
   { id: 'instrument', label: 'Plus Jakarta' },
-  { id: 'newsreader', label: 'JetBrains Mono' },
+  { id: 'newsreader', label: 'Newsreader Serif' },
 ];
 
 type SettingsSection = 'all' | 'shaders' | 'visualizer' | 'interface' | 'theme' | 'storage';
@@ -393,12 +393,12 @@ export const CustomizeView: React.FC<CustomizeViewProps> = ({
     activeSection === 'all' || activeSection === sec;
 
   return (
-    <div className="h-full overflow-y-auto px-6 sm:px-10 py-8 pb-24 max-w-5xl mx-auto space-y-6 select-none">
+    <div className="h-full overflow-y-auto px-8 sm:px-12 py-10 pb-32 max-w-5xl mx-auto space-y-7 select-none">
       {/* Compact Header + Category Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <h1 className="text-2xl font-bold tracking-tight text-white">Settings</h1>
 
-        <div className={`flex items-center gap-1 p-1 ${pillRadius} bg-white/[0.05] overflow-x-auto`}>
+        <div className={`flex items-center gap-1 p-1.5 ${pillRadius} bg-white/[0.05] overflow-x-auto`}>
           {navTabs.map((t) => {
             const Icon = t.icon;
             const active = activeSection === t.id;
@@ -406,7 +406,7 @@ export const CustomizeView: React.FC<CustomizeViewProps> = ({
               <button
                 key={t.id}
                 onClick={() => setActiveSection(t.id)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 ${pillRadius} text-xs font-medium transition-all whitespace-nowrap ${
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 ${pillRadius} text-xs font-medium transition-all whitespace-nowrap ${
                   active
                     ? 'bg-white text-black font-semibold shadow-sm'
                     : 'text-white/60 hover:text-white hover:bg-white/[0.06]'
@@ -420,12 +420,12 @@ export const CustomizeView: React.FC<CustomizeViewProps> = ({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* GROUP 1: SHADERS & BACKGROUND */}
         {showSection('shaders') && (
           <ReactBitsSpotlightCard
             spotlightColor={`${palette.vibrant}22`}
-            className={`p-5 ${cardRadius} bg-white/[0.04] backdrop-blur-2xl space-y-4`}
+            className={`p-6 sm:p-7 ${cardRadius} bg-white/[0.04] backdrop-blur-2xl`}
           >
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-white/60">
@@ -595,9 +595,9 @@ export const CustomizeView: React.FC<CustomizeViewProps> = ({
         {showSection('visualizer') && (
           <ReactBitsSpotlightCard
             spotlightColor={`${palette.vibrant}22`}
-            className={`p-5 ${cardRadius} bg-white/[0.04] backdrop-blur-2xl space-y-4`}
+            className={`p-6 sm:p-7 ${cardRadius} bg-white/[0.04] backdrop-blur-2xl`}
           >
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center justify-between gap-2 pb-1">
               <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-white/60">
                 <Sparkles className="w-3.5 h-3.5" style={{ color: palette.vibrant }} />
                 <span>Visualizer & Voice</span>
@@ -608,7 +608,7 @@ export const CustomizeView: React.FC<CustomizeViewProps> = ({
               </span>
             </div>
 
-            <div className="space-y-2.5">
+            <div className="space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <span className="text-xs font-medium text-white/80 truncate">Mode</span>
                 <CustomDropdown
@@ -720,14 +720,14 @@ export const CustomizeView: React.FC<CustomizeViewProps> = ({
         {showSection('interface') && (
           <ReactBitsSpotlightCard
             spotlightColor={`${palette.vibrant}22`}
-            className={`p-5 ${cardRadius} bg-white/[0.04] backdrop-blur-2xl space-y-4`}
+            className={`p-6 sm:p-7 ${cardRadius} bg-white/[0.04] backdrop-blur-2xl`}
           >
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-white/60">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-white/60 pb-1">
               <Eye className="w-3.5 h-3.5" style={{ color: palette.vibrant }} />
               <span>Player & Interface</span>
             </div>
 
-            <div className="space-y-2.5">
+            <div className="space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <span className="text-xs font-medium text-white/80 truncate">Scene Preset</span>
                 <CustomDropdown
@@ -808,6 +808,19 @@ export const CustomizeView: React.FC<CustomizeViewProps> = ({
 
             <div className="space-y-1.5 pt-2">
               <SettingToggle
+                label="Show Current Chapter Only on Bar"
+                checked={bgConfig.chapterOnlySeekbar ?? false}
+                onToggle={() =>
+                  onChangeBg({
+                    ...bgConfig,
+                    chapterOnlySeekbar: !(bgConfig.chapterOnlySeekbar ?? false),
+                  })
+                }
+                accentColor={palette.vibrant}
+                radiusClass="rounded-full"
+              />
+
+              <SettingToggle
                 label="Full-Screen Dark Progress Filter"
                 checked={bgConfig.fullScreenSeekbar ?? true}
                 onToggle={() =>
@@ -853,23 +866,23 @@ export const CustomizeView: React.FC<CustomizeViewProps> = ({
         {showSection('theme') && (
           <ReactBitsSpotlightCard
             spotlightColor={`${palette.vibrant}22`}
-            className={`p-5 ${cardRadius} bg-white/[0.04] backdrop-blur-2xl space-y-4`}
+            className={`p-6 sm:p-7 ${cardRadius} bg-white/[0.04] backdrop-blur-2xl`}
           >
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center justify-between gap-2 pb-1">
               <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-white/60">
                 <PaletteIcon className="w-3.5 h-3.5" style={{ color: palette.vibrant }} />
                 <span>Theme & Colors</span>
               </div>
               <button
                 onClick={() => setBuilderOpen((v) => !v)}
-                className={`flex items-center gap-1 px-2.5 py-1 ${pillRadius} bg-white/[0.08] hover:bg-white/[0.14] text-xs font-medium text-white transition-all`}
+                className={`flex items-center gap-1.5 px-3 py-1.5 ${pillRadius} bg-white/[0.08] hover:bg-white/[0.14] text-xs font-medium text-white transition-all`}
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>New Theme</span>
               </button>
             </div>
 
-            <div className="space-y-2.5">
+            <div className="space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <span className="text-xs font-medium text-white/80 truncate">Cover Override</span>
                 <button
@@ -1021,12 +1034,12 @@ export const CustomizeView: React.FC<CustomizeViewProps> = ({
         {showSection('storage') && (
           <ReactBitsSpotlightCard
             spotlightColor={`${palette.vibrant}22`}
-            className={`p-5 ${cardRadius} bg-white/[0.04] backdrop-blur-2xl space-y-4 md:col-span-2`}
+            className={`p-6 sm:p-7 ${cardRadius} bg-white/[0.04] backdrop-blur-2xl md:col-span-2`}
           >
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center justify-between gap-2 pb-1">
               <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-white/60">
                 <Database className="w-3.5 h-3.5" style={{ color: palette.vibrant }} />
-                <span>Library Index (~/.tide/all.json)</span>
+                <span>Library Index (~/.tide/all.json · chapters.json)</span>
               </div>
               <span className="text-xs font-mono text-white/45">
                 {books.length} books · {watchedRoots.length} root folder
@@ -1034,7 +1047,7 @@ export const CustomizeView: React.FC<CustomizeViewProps> = ({
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
               <button
                 disabled={indexBusy !== null}
                 onClick={async () => {

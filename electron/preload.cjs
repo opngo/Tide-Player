@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('tideElectron', {
     ipcRenderer.invoke('tide:window:setMiniPlayer', enabled),
   openDirectoryDialog: () => ipcRenderer.invoke('tide:dialog:openDirectory'),
   getAppInfo: () => ipcRenderer.invoke('tide:app:getInfo'),
+  updateMediaMetadata: (meta) => ipcRenderer.invoke('tide:smtc:update', meta),
   onMediaKey: (callback) => {
     const handler = (_event, action) => callback(action);
     ipcRenderer.on('tide:media-key', handler);

@@ -23,6 +23,19 @@ let savedBoundsBeforeMini = null;
 
 const isSmokeTest = process.argv.includes('--smoke-test');
 
+// Enable Windows SystemMediaTransportControls (SMTC) & FluentFlyout integration
+try {
+  app.commandLine.appendSwitch(
+    'enable-features',
+    'HardwareMediaKeyHandling,MediaSessionService,SystemMediaTransportControls'
+  );
+  if (process.platform === 'win32') {
+    app.setAppUserModelId('dev.tide.audiobook');
+  }
+} catch {
+  // ignore
+}
+
 const MIME_MAP = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'application/javascript; charset=utf-8',
@@ -297,18 +310,52 @@ function registerIpcAndShortcuts() {
     tideJsonPath: path.join(os.homedir(), '.tide', 'all.json'),
   }));
 
-  try {
-    globalShortcut.register('MediaPlayPause', () => {
-      mainWindow?.webContents.send('tide:media-key', 'play-pause');
-    });
-    globalShortcut.register('MediaNextTrack', () => {
-      mainWindow?.webContents.send('tide:media-key', 'next-chapter');
-    });
-    globalShortcut.register('MediaPreviousTrack', () => {
-      mainWindow?.webContents.send('tide:media-key', 'prev-chapter');
-    });
-  } catch {
-    // ignore in headless environments
+  ipcMain.handle('tide:smtc:update', (_evt, meta) => {
+    try {
+      if (!meta) return false;
+      const displayTitle = meta.artist
+        ? `${meta.title} — ${meta.artist}`
+        : String(meta.title || '');
+      if (mainWindow && displayTitle) {
+        mainWindow.setTitle(displayTitle);
+      }
+      if (tray && displayTitle) {
+        tray.setToolTip(displayTitle);
+      }
+      if (
+        mainWindow &&
+        typeof meta.pngDataUrl === 'string' &&
+        meta.pngDataUrl.startsWith('data:image/png;base64,')
+      ) {
+        const img = nativeImage.createFromDataURL(meta.pngDataUrl);
+        if (!img.isEmpty() && process.platform === 'win32') {
+          mainWindow.setOverlayIcon(
+            img.resize({ width: 16, height: 16 }),
+            displayTitle
+          );
+        }
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  });
+
+  // Only register fallback globalShortcuts on Linux where Windows SMTC / macOS NowPlaying isn't used
+  if (process.platform === 'linux') {
+    try {
+      globalShortcut.register('MediaPlayPause', () => {
+        mainWindow?.webContents.send('tide:media-key', 'play-pause');
+      });
+      globalShortcut.register('MediaNextTrack', () => {
+        mainWindow?.webContents.send('tide:media-key', 'next-chapter');
+      });
+      globalShortcut.register('MediaPreviousTrack', () => {
+        mainWindow?.webContents.send('tide:media-key', 'prev-chapter');
+      });
+    } catch {
+      // ignore in headless environments
+    }
   }
 }
 

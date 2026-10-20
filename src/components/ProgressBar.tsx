@@ -22,6 +22,7 @@ interface ProgressBarProps {
   bookmarks: Bookmark[];
   onSeek: (ms: number) => void;
   large?: boolean;
+  chapterOnly?: boolean;
 }
 
 export function findActiveChapterIndex(
@@ -62,36 +63,124 @@ export function formatTimeDisplay(
   durationMs: number,
   currentChapter: Chapter,
   speed: number,
-  mode: TimeDisplayMode
+  mode: TimeDisplayMode,
+  chapterOnly = false
 ): string {
+  const chDur = Math.max(1, currentChapter.endMs - currentChapter.startMs);
+  const chPos = Math.max(0, Math.min(chDur, positionMs - currentChapter.startMs));
   if (mode === 'elapsed') {
+    if (chapterOnly) {
+      return `${formatDurationNumeric(chPos)} / ${formatDurationNumeric(chDur)}`;
+    }
     return `${formatDurationNumeric(positionMs)} / ${formatDurationNumeric(durationMs)}`;
   }
   if (mode === 'chapter-remaining') {
     return `${formatDurationNumeric(currentChapter.endMs - positionMs, true)} ch`;
   }
   if (mode === 'finish-clock') {
-    return formatFinishClockTime(durationMs - positionMs, speed);
+    const rem = chapterOnly ? currentChapter.endMs - positionMs : durationMs - positionMs;
+    return formatFinishClockTime(rem, speed);
+  }
+  if (chapterOnly) {
+    return formatDurationNumeric(currentChapter.endMs - positionMs, true);
   }
   return formatDurationNumeric(durationMs - positionMs, true);
 }
 
 export const ProgressBar: React.FC<ProgressBarProps> = ({
   style,
-  positionMs,
-  durationMs,
-  chapters,
+  positionMs: rawPositionMs,
+  durationMs: rawDurationMs,
+  chapters: rawChapters,
   currentChapter: propCurrentChapter,
-  peaks,
+  peaks: rawPeaks,
   palette,
-  bookmarks,
-  onSeek,
+  bookmarks: rawBookmarks,
+  onSeek: rawOnSeek,
   large = false,
+  chapterOnly = false,
 }) => {
   const barRef = useRef<HTMLDivElement | null>(null);
   const [hoverRatio, setHoverRatio] = useState<number | null>(null);
   const [hoveredTimeMs, setHoveredTimeMs] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+
+  const rawLastChEnd =
+    rawChapters.length > 0 ? rawChapters[rawChapters.length - 1].endMs : 0;
+  const rawSafeDuration = Math.max(1, rawDurationMs, rawLastChEnd);
+  const rawActiveIdx = findActiveChapterIndex(rawChapters, rawPositionMs);
+  const activeScopeChapter =
+    propCurrentChapter ||
+    rawChapters[rawActiveIdx] ||
+    rawChapters[0] || {
+      id: 'ch-0',
+      title: '',
+      startMs: 0,
+      endMs: rawSafeDuration,
+    };
+
+  const scopeStartMs = chapterOnly ? activeScopeChapter.startMs : 0;
+  const scopeDurationMs = chapterOnly
+    ? Math.max(1, activeScopeChapter.endMs - activeScopeChapter.startMs)
+    : rawSafeDuration;
+
+  const positionMs = chapterOnly
+    ? Math.max(0, Math.min(scopeDurationMs, rawPositionMs - scopeStartMs))
+    : rawPositionMs;
+  const durationMs = scopeDurationMs;
+
+  const chapters: Chapter[] = React.useMemo(() => {
+    if (!chapterOnly) return rawChapters;
+    return [
+      {
+        ...activeScopeChapter,
+        startMs: 0,
+        endMs: scopeDurationMs,
+      },
+    ];
+  }, [chapterOnly, rawChapters, activeScopeChapter, scopeDurationMs]);
+
+  const bookmarks: Bookmark[] = React.useMemo(() => {
+    if (!chapterOnly) return rawBookmarks;
+    return rawBookmarks
+      .filter(
+        (b) =>
+          b.positionMs >= scopeStartMs &&
+          b.positionMs <= activeScopeChapter.endMs
+      )
+      .map((b) => ({
+        ...b,
+        positionMs: Math.max(0, b.positionMs - scopeStartMs),
+      }));
+  }, [chapterOnly, rawBookmarks, scopeStartMs, activeScopeChapter.endMs]);
+
+  const peaks: number[] = React.useMemo(() => {
+    if (!chapterOnly || !rawPeaks || rawPeaks.length === 0) return rawPeaks;
+    const startIdx = Math.max(
+      0,
+      Math.floor((scopeStartMs / rawSafeDuration) * rawPeaks.length)
+    );
+    const endIdx = Math.min(
+      rawPeaks.length,
+      Math.ceil((activeScopeChapter.endMs / rawSafeDuration) * rawPeaks.length)
+    );
+    const sliced = rawPeaks.slice(startIdx, Math.max(startIdx + 1, endIdx));
+    if (sliced.length >= 24) return sliced;
+    return Array.from({ length: rawPeaks.length }, (_, i) => {
+      const pos = (i / Math.max(1, rawPeaks.length - 1)) * (sliced.length - 1);
+      const lo = Math.floor(pos);
+      const hi = Math.min(sliced.length - 1, Math.ceil(pos));
+      const frac = pos - lo;
+      return sliced[lo] * (1 - frac) + sliced[hi] * frac;
+    });
+  }, [chapterOnly, rawPeaks, scopeStartMs, activeScopeChapter.endMs, rawSafeDuration]);
+
+  const onSeek = React.useCallback(
+    (localTargetMs: number) => {
+      rawOnSeek(Math.round(scopeStartMs + localTargetMs));
+    },
+    [rawOnSeek, scopeStartMs]
+  );
 
   const lastChEnd =
     chapters.length > 0 ? chapters[chapters.length - 1].endMs : 0;
@@ -116,7 +205,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
 
   const activeChapterIdx = findActiveChapterIndex(displayChapters, positionMs);
   const currentChapter =
-    propCurrentChapter ||
+    (chapterOnly ? displayChapters[0] : propCurrentChapter) ||
     displayChapters[activeChapterIdx] ||
     displayChapters[0] || {
       id: 'ch-0',

@@ -143,6 +143,25 @@ check('Physical audio file segment timeline mapping is present in App.tsx', () =
   );
 });
 
+check('FluentFlyout / Windows SMTC mediaSession synchronizer is wired with raster PNG cover support', () => {
+  const msCode = fs.readFileSync(
+    path.join(rootDir, 'src/services/mediaSession.ts'),
+    'utf8'
+  );
+  assert(
+    msCode.includes('new MediaMetadata') && msCode.includes('image/png'),
+    'MediaMetadata raster PNG artwork missing in src/services/mediaSession.ts'
+  );
+  const tbCode = fs.readFileSync(
+    path.join(rootDir, 'src/components/ElectronTitleBar.tsx'),
+    'utf8'
+  );
+  assert(
+    !tbCode.includes('currentBookTitle') && !tbCode.includes('onOpenShowcaseSite'),
+    'ElectronTitleBar must not display book title or showcase website link'
+  );
+});
+
 // 4. Electron & NSIS Configuration Checks
 console.log('\n[4/6] Electron Desktop & NSIS Installer Configuration');
 check('electron/main.cjs, electron/preload.cjs, and icons exist', () => {

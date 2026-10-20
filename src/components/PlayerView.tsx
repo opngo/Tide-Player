@@ -22,6 +22,7 @@ import {
 import {
   Book,
   Bookmark,
+  Palette,
   ProgressBarStyle,
   TimeDisplayMode,
   CoverShape,
@@ -45,6 +46,7 @@ import { ReactBitsDecryptedText } from './ReactBitsComponents';
 interface PlayerViewProps {
   book: Book;
   books: Book[];
+  palette?: Palette;
   isPlaying: boolean;
   onTogglePlay: () => void;
   positionMs: number;
@@ -98,6 +100,8 @@ interface PlayerViewProps {
   onToggleSlickMode?: () => void;
   slickTextSpeed?: number;
   fullScreenSeekbar?: boolean;
+  chapterOnlySeekbar?: boolean;
+  onToggleChapterOnlySeekbar?: () => void;
   seekbarWidthPct?: number;
   squareCorners: boolean;
 }
@@ -121,6 +125,7 @@ const PERIMETER_VIZ_TYPES = new Set<VizType>([
 export const PlayerView: React.FC<PlayerViewProps> = ({
   book,
   books,
+  palette: propPalette,
   isPlaying,
   onTogglePlay,
   positionMs,
@@ -173,6 +178,8 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
   onToggleSlickMode,
   slickTextSpeed = 18,
   fullScreenSeekbar = true,
+  chapterOnlySeekbar = false,
+  onToggleChapterOnlySeekbar,
   seekbarWidthPct = 88,
   squareCorners,
 }) => {
@@ -206,14 +213,15 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
       endMs: book.durationMs,
     };
 
-  const palette = book.palette;
+  const palette = propPalette || book.palette;
   const bookBookmarks = bookmarks.filter((b) => b.bookId === book.id);
   const timeString = formatTimeDisplay(
     positionMs,
     book.durationMs,
     currentChapter,
     speed,
-    timeMode
+    timeMode,
+    chapterOnlySeekbar
   );
 
   const isOrbVisualizer =
@@ -536,13 +544,20 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
   const showFullScreenCurtain =
     fullScreenSeekbar || progressBarStyle === 'screen-veil';
   const safeDur = Math.max(1, book.durationMs);
-  const fullScreenProgress = Math.max(0, Math.min(1, positionMs / safeDur));
+  const chStartMs = chapterOnlySeekbar ? currentChapter.startMs : 0;
+  const chSpanMs = chapterOnlySeekbar
+    ? Math.max(1, currentChapter.endMs - currentChapter.startMs)
+    : safeDur;
+  const fullScreenProgress = Math.max(
+    0,
+    Math.min(1, (positionMs - chStartMs) / chSpanMs)
+  );
 
   const handleScreenCurtainScrub = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!screenCurtainRef.current) return;
     const rect = screenCurtainRef.current.getBoundingClientRect();
     const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    onSeek(Math.round(ratio * safeDur));
+    onSeek(Math.round(chStartMs + ratio * chSpanMs));
   };
 
   const renderFullScreenSeekbar = () => {
@@ -569,7 +584,7 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
                 );
                 setScreenHoverRatio(ratio);
                 if (e.buttons === 1) {
-                  onSeek(Math.round(ratio * safeDur));
+                  onSeek(Math.round(chStartMs + ratio * chSpanMs));
                 }
               }
             : undefined
@@ -688,19 +703,25 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
         </div>
       </div>
 
-      {/* Subtle Hover-Only Exit Pill in Top-Right when in Slick Mode ('L') */}
+      {/* Fully Hidden Exit Pill in Top-Right when in Slick Mode ('L'), slightly shown only on hover in corner area */}
       {onToggleSlickMode && (
-        <button
-          onClick={onToggleSlickMode}
-          className={`fixed top-5 right-6 z-40 px-3 py-1.5 ${pillRadius} bg-white/[0.05] hover:bg-white/[0.16] text-[11px] font-mono text-white/40 hover:text-white transition-all duration-500 ${
-            isSlickMode
-              ? 'opacity-40 hover:opacity-100 scale-100 translate-y-0 pointer-events-auto'
-              : 'opacity-0 scale-75 -translate-y-3 pointer-events-none'
+        <div
+          className={`fixed top-0 right-0 w-28 h-20 z-40 flex items-start justify-end p-5 group ${
+            isSlickMode ? 'pointer-events-auto' : 'pointer-events-none'
           }`}
-          title="Exit Slick Mode (L)"
         >
-          L
-        </button>
+          <button
+            onClick={onToggleSlickMode}
+            className={`px-3 py-1.5 ${pillRadius} bg-white/[0.04] hover:bg-white/[0.1] text-[11px] font-mono text-white/70 transition-all duration-300 ${
+              isSlickMode
+                ? 'opacity-0 group-hover:opacity-35 hover:!opacity-60 scale-100 translate-y-0'
+                : 'opacity-0 scale-75 -translate-y-3 pointer-events-none'
+            }`}
+            title="Exit Slick Mode (L)"
+          >
+            L
+          </button>
+        </div>
       )}
 
       {/* Mode 2: Full-Bleed Cover Background */}
@@ -715,18 +736,22 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
         </div>
       )}
 
-      {/* Top Bar: Smoothly glides out when entering 'L' Mode */}
+      {/* Top Bar: Smoothly glides out when entering 'L' Mode; 3-dots hidden unless hovered or expanded */}
       <div
         className={`relative z-30 flex items-center justify-end transition-all duration-600 ease-[cubic-bezier(0.16,1,0.3,1)] ${
           isSlickMode
             ? 'opacity-0 -translate-y-6 scale-95 pointer-events-none h-0 overflow-hidden'
-            : 'opacity-100 translate-y-0 scale-100'
+            : 'mt-5 opacity-100 translate-y-0 scale-100'
         }`}
       >
-        <div className="relative">
+        <div className="relative group/dots p-3 -m-3">
           <button
             onClick={() => setShowTopRightMenu((s) => !s)}
-            className={`p-2.5 ${pillRadius} backdrop-blur-2xl bg-white/[0.07] hover:bg-white/[0.14] text-white/80 hover:text-white transition-all`}
+            className={`p-2.5 ${pillRadius} backdrop-blur-2xl bg-white/[0.07] hover:bg-white/[0.14] text-white/80 hover:text-white transition-all duration-300 ${
+              showTopRightMenu
+                ? 'opacity-100'
+                : 'opacity-0 group-hover/dots:opacity-100 hover:!opacity-100'
+            }`}
             title="Player Menu & Equalizer"
           >
             <MoreHorizontal className="w-5 h-5" />
@@ -917,6 +942,22 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
                     </button>
                   ))}
                 </div>
+
+                {onToggleChapterOnlySeekbar && (
+                  <button
+                    onClick={onToggleChapterOnlySeekbar}
+                    className={`w-full mt-1.5 px-3 py-2 ${pillRadius} text-[11px] font-mono flex items-center justify-between transition-all ${
+                      chapterOnlySeekbar
+                        ? 'bg-white/20 text-white font-medium'
+                        : 'bg-white/[0.04] text-white/60 hover:text-white'
+                    }`}
+                  >
+                    <span>Show Current Chapter Only on Bar</span>
+                    <span className="text-[10px] opacity-75">
+                      {chapterOnlySeekbar ? 'ON' : 'OFF'}
+                    </span>
+                  </button>
+                )}
               </div>
 
               {/* Playback Speed */}
@@ -1309,6 +1350,7 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
             onSeek={onSeek}
             onCycleStyle={onCycleProgressBarStyle}
             large={isSlickMode}
+            chapterOnly={chapterOnlySeekbar}
           />
         </div>
 

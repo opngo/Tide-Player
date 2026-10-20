@@ -185,16 +185,18 @@ export const ReactBitsSpotlightCard: React.FC<SpotlightCardProps> = ({
       }}
       onMouseEnter={() => setOpacity(1)}
       onMouseLeave={() => setOpacity(0)}
-      className={`relative overflow-hidden ${className}`}
+      className={`relative ${className}`}
     >
-      <div
-        className="pointer-events-none absolute -inset-px transition-opacity duration-300"
-        style={{
-          opacity,
-          background: `radial-gradient(420px circle at ${pos.x}px ${pos.y}px, ${spotlightColor}, transparent 70%)`,
-        }}
-      />
-      <div className="relative z-10">{children}</div>
+      <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit]">
+        <div
+          className="pointer-events-none absolute -inset-px transition-opacity duration-300"
+          style={{
+            opacity,
+            background: `radial-gradient(420px circle at ${pos.x}px ${pos.y}px, ${spotlightColor}, transparent 70%)`,
+          }}
+        />
+      </div>
+      <div className="relative z-10 flex flex-col gap-5">{children}</div>
     </div>
   );
 };

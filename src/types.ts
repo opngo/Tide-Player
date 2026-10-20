@@ -142,6 +142,7 @@ export type BgConfig = {
   accentCount?: 0 | 1 | 2 | 3;
   slickTextSpeed?: number;
   fullScreenSeekbar?: boolean;
+  chapterOnlySeekbar?: boolean;
   screenVeilOpacity?: number;
   seekbarWidthPct?: number;
   reactivity: 'off' | 'low' | 'high';

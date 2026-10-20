@@ -6,10 +6,6 @@ import {
   Award,
   TrendingUp,
   Calendar,
-  Terminal,
-  Package,
-  Copy,
-  Check,
   HardDrive,
   Bookmark as BookmarkIcon,
 } from 'lucide-react';
@@ -69,9 +65,7 @@ export const StatsView: React.FC<StatsViewProps> = ({
   onSelectBook,
   squareCorners,
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'stats' | 'docs'>('stats');
   const [hoveredDay, setHoveredDay] = useState<DayCell | null>(null);
-  const [copiedCmd, setCopiedCmd] = useState<string | null>(null);
   const [animProgress, setAnimProgress] = useState(0);
 
   useEffect(() => {
@@ -85,7 +79,7 @@ export const StatsView: React.FC<StatsViewProps> = ({
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [activeSubTab]);
+  }, []);
 
   const stats = useMemo(() => {
     const bookById = new Map<string, Book>(books.map((b) => [b.id, b]));
@@ -270,218 +264,201 @@ export const StatsView: React.FC<StatsViewProps> = ({
   const cardRadius = squareCorners ? 'rounded-none' : 'rounded-2xl';
   const pillRadius = squareCorners ? 'rounded-none' : 'rounded-xl';
 
-  const copyCommand = (id: string, cmd: string) => {
-    navigator.clipboard?.writeText(cmd);
-    setCopiedCmd(id);
-    setTimeout(() => setCopiedCmd(null), 1800);
-  };
-
   return (
     <div className="h-full overflow-y-auto px-6 sm:px-10 py-8 pb-24 max-w-6xl mx-auto space-y-6 select-none">
       {/* Compact Header */}
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-bold tracking-tight text-white">Stats & Docs</h1>
-
-        <div className={`flex items-center gap-1 p-1 ${pillRadius} bg-white/[0.05]`}>
-          <button
-            onClick={() => setActiveSubTab('stats')}
-            className={`px-3.5 py-1.5 ${pillRadius} text-xs font-medium transition-all ${
-              activeSubTab === 'stats'
-                ? 'bg-white text-black font-semibold'
-                : 'text-white/60 hover:text-white'
-            }`}
-          >
-            Stats
-          </button>
-          <button
-            onClick={() => setActiveSubTab('docs')}
-            className={`px-3.5 py-1.5 ${pillRadius} text-xs font-medium transition-all ${
-              activeSubTab === 'docs'
-                ? 'bg-white text-black font-semibold'
-                : 'text-white/60 hover:text-white'
-            }`}
-          >
-            Docs & Build
-          </button>
-        </div>
+        <h1 className="text-2xl font-bold tracking-tight text-white">Stats</h1>
       </div>
 
-      {activeSubTab === 'stats' ? (
-        <>
-          {/* Real KPI Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
-            <ReactBitsSpotlightCard
-              spotlightColor={`${palette.vibrant}28`}
-              className={`p-4 ${cardRadius} bg-white/[0.04] backdrop-blur-2xl`}
-            >
-              <div className="flex items-center justify-between text-white/45 mb-2">
-                <span className="text-[11px] font-medium">Listened</span>
-                <Clock className="w-3.5 h-3.5" style={{ color: palette.vibrant }} />
-              </div>
-              <div className="text-2xl font-bold text-white font-mono tabular-nums">
-                {formatRealListeningTime(stats.totalRealSeconds * animProgress)}
-              </div>
-              <div className="text-[11px] text-white/40 mt-1 font-mono">
-                {formatDurationNumeric(stats.totalLibraryMs)} total library
-              </div>
-            </ReactBitsSpotlightCard>
-
-            <ReactBitsSpotlightCard
-              spotlightColor={`${palette.vibrant}28`}
-              className={`p-4 ${cardRadius} bg-white/[0.04] backdrop-blur-2xl`}
-            >
-              <div className="flex items-center justify-between text-white/45 mb-2">
-                <span className="text-[11px] font-medium">Streak</span>
-                <Flame className="w-3.5 h-3.5 text-amber-400" />
-              </div>
-              <div className="text-2xl font-bold text-white font-mono tabular-nums">
-                {Math.round(stats.currentStreak * animProgress)}d
-              </div>
-              <div className="text-[11px] text-white/40 mt-1 font-mono">
-                {stats.activeDaysCount} active day{stats.activeDaysCount === 1 ? '' : 's'}
-              </div>
-            </ReactBitsSpotlightCard>
-
-            <ReactBitsSpotlightCard
-              spotlightColor={`${palette.vibrant}28`}
-              className={`p-4 ${cardRadius} bg-white/[0.04] backdrop-blur-2xl`}
-            >
-              <div className="flex items-center justify-between text-white/45 mb-2">
-                <span className="text-[11px] font-medium">Library</span>
-                <BookOpen className="w-3.5 h-3.5 text-emerald-400" />
-              </div>
-              <div className="text-2xl font-bold text-white font-mono tabular-nums">
-                {books.length}
-              </div>
-              <div className="text-[11px] text-white/40 mt-1 font-mono">
-                {stats.inProgressBooks} active · {stats.completedBooks} done ·{' '}
-                {stats.totalChapters} ch
-              </div>
-            </ReactBitsSpotlightCard>
-
-            <ReactBitsSpotlightCard
-              spotlightColor={`${palette.vibrant}28`}
-              className={`p-4 ${cardRadius} bg-white/[0.04] backdrop-blur-2xl`}
-            >
-              <div className="flex items-center justify-between text-white/45 mb-2">
-                <span className="text-[11px] font-medium">Disk & Speed</span>
-                <HardDrive className="w-3.5 h-3.5 text-sky-400" />
-              </div>
-              <div className="text-2xl font-bold text-white font-mono tabular-nums">
-                {(stats.totalSizeBytes / (1024 * 1024)).toFixed(1)} MB
-              </div>
-              <div className="text-[11px] text-white/40 mt-1 font-mono">
-                {stats.avgSpeed.toFixed(2)}× speed · {bookmarks.length} marks
-              </div>
-            </ReactBitsSpotlightCard>
-          </div>
-
-          {/* 365-Day Real Activity Heatmap */}
-          <div className={`p-5 ${cardRadius} bg-white/[0.04] backdrop-blur-2xl space-y-3`}>
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 text-xs font-semibold text-white/75">
-                <Calendar className="w-3.5 h-3.5" style={{ color: palette.vibrant }} />
-                <span>365-Day Activity</span>
-              </div>
-
-              <div className="text-xs font-mono text-white/60 h-4">
-                {hoveredDay ? (
-                  <span>
-                    {hoveredDay.date} · {formatRealListeningTime(hoveredDay.seconds)}
-                    {hoveredDay.bookTitle ? ` · ${hoveredDay.bookTitle}` : ''}
-                  </span>
-                ) : (
-                  <span className="text-white/35">Hover a day</span>
-                )}
-              </div>
+      {/* Real KPI Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+        <ReactBitsSpotlightCard
+          spotlightColor={`${palette.vibrant}28`}
+          className={`p-4 ${cardRadius} bg-white/[0.04] backdrop-blur-2xl`}
+        >
+          <div className="space-y-1">
+            <div className="flex items-center justify-between text-white/45 mb-1">
+              <span className="text-[11px] font-medium">Listened</span>
+              <Clock className="w-3.5 h-3.5" style={{ color: palette.vibrant }} />
             </div>
-
-            <div className="overflow-x-auto pb-1">
-              <div className="inline-flex gap-[3.5px] min-w-max">
-                {stats.weeks.map((week, wIdx) => (
-                  <div key={wIdx} className="flex flex-col gap-[3.5px]">
-                    {week.map((day) => {
-                      const bgStyle =
-                        day.level === 0
-                          ? { backgroundColor: 'rgba(255,255,255,0.05)' }
-                          : day.level === 1
-                            ? { backgroundColor: `${palette.vibrant}40` }
-                            : day.level === 2
-                              ? { backgroundColor: `${palette.vibrant}75` }
-                              : day.level === 3
-                                ? { backgroundColor: `${palette.vibrant}b5` }
-                                : {
-                                    backgroundColor: palette.light,
-                                    boxShadow: `0 0 8px ${palette.vibrant}`,
-                                  };
-
-                      return (
-                        <div
-                          key={day.date}
-                          onMouseEnter={() => setHoveredDay(day)}
-                          onMouseLeave={() => setHoveredDay(null)}
-                          className="w-3 h-3 rounded-[3px] transition-transform duration-150 hover:scale-125 cursor-pointer"
-                          style={{
-                            ...bgStyle,
-                            transform: `scale(${Math.min(
-                              1,
-                              Math.max(0.2, animProgress * 1.15 - (wIdx / 52) * 0.15)
-                            )})`,
-                          }}
-                        />
-                      );
-                    })}
-                  </div>
-                ))}
-              </div>
+            <div className="text-2xl font-bold text-white font-mono tabular-nums">
+              {formatRealListeningTime(stats.totalRealSeconds * animProgress)}
+            </div>
+            <div className="text-[11px] text-white/40 font-mono">
+              {formatDurationNumeric(stats.totalLibraryMs)} total library
             </div>
           </div>
+        </ReactBitsSpotlightCard>
 
-          {/* Real 24-Hour Distribution + Book Progress */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            <div className={`p-5 ${cardRadius} bg-white/[0.04] backdrop-blur-2xl space-y-4`}>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-xs font-semibold text-white/75">
-                  <TrendingUp className="w-3.5 h-3.5" style={{ color: palette.vibrant }} />
-                  <span>Hourly Activity (24h)</span>
-                </div>
-                <span className="text-[11px] font-mono text-white/40">Real Sessions</span>
-              </div>
+        <ReactBitsSpotlightCard
+          spotlightColor={`${palette.vibrant}28`}
+          className={`p-4 ${cardRadius} bg-white/[0.04] backdrop-blur-2xl`}
+        >
+          <div className="space-y-1">
+            <div className="flex items-center justify-between text-white/45 mb-1">
+              <span className="text-[11px] font-medium">Streak</span>
+              <Flame className="w-3.5 h-3.5 text-amber-400" />
+            </div>
+            <div className="text-2xl font-bold text-white font-mono tabular-nums">
+              {Math.round(stats.currentStreak * animProgress)}d
+            </div>
+            <div className="text-[11px] text-white/40 font-mono">
+              {stats.activeDaysCount} active day{stats.activeDaysCount === 1 ? '' : 's'}
+            </div>
+          </div>
+        </ReactBitsSpotlightCard>
 
-              <div className="h-36 flex items-end gap-1.5 pt-4">
-                {stats.hourlyBars.map((item) => {
-                  const hPct =
-                    item.seconds > 0
-                      ? Math.max(10, Math.round(item.ratio * 100 * animProgress))
-                      : 4;
+        <ReactBitsSpotlightCard
+          spotlightColor={`${palette.vibrant}28`}
+          className={`p-4 ${cardRadius} bg-white/[0.04] backdrop-blur-2xl`}
+        >
+          <div className="space-y-1">
+            <div className="flex items-center justify-between text-white/45 mb-1">
+              <span className="text-[11px] font-medium">Library</span>
+              <BookOpen className="w-3.5 h-3.5 text-emerald-400" />
+            </div>
+            <div className="text-2xl font-bold text-white font-mono tabular-nums">
+              {books.length}
+            </div>
+            <div className="text-[11px] text-white/40 font-mono">
+              {stats.inProgressBooks} active · {stats.completedBooks} done ·{' '}
+              {stats.totalChapters} ch
+            </div>
+          </div>
+        </ReactBitsSpotlightCard>
+
+        <ReactBitsSpotlightCard
+          spotlightColor={`${palette.vibrant}28`}
+          className={`p-4 ${cardRadius} bg-white/[0.04] backdrop-blur-2xl`}
+        >
+          <div className="space-y-1">
+            <div className="flex items-center justify-between text-white/45 mb-1">
+              <span className="text-[11px] font-medium">Disk & Speed</span>
+              <HardDrive className="w-3.5 h-3.5 text-sky-400" />
+            </div>
+            <div className="text-2xl font-bold text-white font-mono tabular-nums">
+              {(stats.totalSizeBytes / (1024 * 1024)).toFixed(1)} MB
+            </div>
+            <div className="text-[11px] text-white/40 font-mono">
+              {stats.avgSpeed.toFixed(2)}× speed · {bookmarks.length} marks
+            </div>
+          </div>
+        </ReactBitsSpotlightCard>
+      </div>
+
+      {/* 365-Day Real Activity Heatmap */}
+      <div className={`p-5 ${cardRadius} bg-white/[0.04] backdrop-blur-2xl space-y-3`}>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-xs font-semibold text-white/75">
+            <Calendar className="w-3.5 h-3.5" style={{ color: palette.vibrant }} />
+            <span>365-Day Activity</span>
+          </div>
+
+          <div className="text-xs font-mono text-white/60 h-4">
+            {hoveredDay ? (
+              <span>
+                {hoveredDay.date} · {formatRealListeningTime(hoveredDay.seconds)}
+                {hoveredDay.bookTitle ? ` · ${hoveredDay.bookTitle}` : ''}
+              </span>
+            ) : (
+              <span className="text-white/35">Hover a day</span>
+            )}
+          </div>
+        </div>
+
+        <div className="overflow-x-auto pb-1">
+          <div className="inline-flex gap-[3.5px] min-w-max">
+            {stats.weeks.map((week, wIdx) => (
+              <div key={wIdx} className="flex flex-col gap-[3.5px]">
+                {week.map((day) => {
+                  const bgStyle =
+                    day.level === 0
+                      ? { backgroundColor: 'rgba(255,255,255,0.05)' }
+                      : day.level === 1
+                        ? { backgroundColor: `${palette.vibrant}38` }
+                        : day.level === 2
+                          ? { backgroundColor: `${palette.vibrant}6e` }
+                          : day.level === 3
+                            ? { backgroundColor: `${palette.vibrant}ad` }
+                            : {
+                                backgroundColor: palette.vibrant,
+                                boxShadow: `0 0 8px ${palette.vibrant}55`,
+                              };
+
                   return (
                     <div
-                      key={item.hour}
-                      className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end group"
-                      title={`${String(item.hour).padStart(2, '0')}:00 — ${formatRealListeningTime(
-                        item.seconds
-                      )}`}
-                    >
-                      <div
-                        className="w-full rounded-t transition-all duration-300"
-                        style={{
-                          height: `${hPct}%`,
-                          backgroundColor:
-                            item.seconds > 0
-                              ? palette.vibrant
-                              : 'rgba(255,255,255,0.06)',
-                        }}
-                      />
-                      {item.hour % 6 === 0 && (
-                        <span className="text-[9px] font-mono text-white/35">
-                          {String(item.hour).padStart(2, '0')}h
-                        </span>
-                      )}
-                    </div>
+                      key={day.date}
+                      onMouseEnter={() => setHoveredDay(day)}
+                      onMouseLeave={() => setHoveredDay(null)}
+                      className="w-3 h-3 rounded-[3px] transition-transform duration-150 hover:scale-125 cursor-pointer"
+                      style={{
+                        ...bgStyle,
+                        transform: `scale(${Math.min(
+                          1,
+                          Math.max(0.2, animProgress * 1.15 - (wIdx / 52) * 0.15)
+                        )})`,
+                      }}
+                    />
                   );
                 })}
               </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Real 24-Hour Distribution + Book Progress */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <div className={`p-5 ${cardRadius} bg-white/[0.04] backdrop-blur-2xl space-y-4`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-xs font-semibold text-white/75">
+              <TrendingUp className="w-3.5 h-3.5" style={{ color: palette.vibrant }} />
+              <span>Hourly Activity (24h)</span>
             </div>
+            <span className="text-[11px] font-mono text-white/40">Real Sessions</span>
+          </div>
+
+          <div className="h-40 flex items-stretch gap-1.5 pt-2">
+            {stats.hourlyBars.map((item) => {
+              const hPct =
+                item.seconds > 0
+                  ? Math.max(10, Math.round(item.ratio * 100 * animProgress))
+                  : 4;
+              return (
+                <div
+                  key={item.hour}
+                  className="flex-1 flex flex-col items-center h-full group"
+                  title={`${String(item.hour).padStart(2, '0')}:00 — ${formatRealListeningTime(
+                    item.seconds
+                  )}`}
+                >
+                  {/* Equal-height bar track container so every bar sits on the exact same baseline */}
+                  <div className="flex-1 w-full flex items-end">
+                    <div
+                      className="w-full rounded-t transition-all duration-300"
+                      style={{
+                        height: `${hPct}%`,
+                        backgroundColor:
+                          item.seconds > 0
+                            ? palette.vibrant
+                            : 'rgba(255,255,255,0.06)',
+                      }}
+                    />
+                  </div>
+                  {/* Fixed-height bottom timestamp row so labels never push bars up */}
+                  <div className="h-5 flex items-center justify-center pt-1">
+                    {item.hour % 6 === 0 && (
+                      <span className="text-[9px] font-mono text-white/35 leading-none">
+                        {String(item.hour).padStart(2, '0')}h
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
 
             <div className={`p-5 ${cardRadius} bg-white/[0.04] backdrop-blur-2xl space-y-3`}>
               <div className="flex items-center justify-between">
@@ -539,71 +516,6 @@ export const StatsView: React.FC<StatsViewProps> = ({
               </div>
             </div>
           </div>
-        </>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {[
-            {
-              id: 'dev',
-              title: 'Local Dev',
-              icon: Terminal,
-              cmd: 'npm install && npm run dev -- --host 0.0.0.0 --port 5173',
-            },
-            {
-              id: 'tauri',
-              title: 'Tauri Desktop (.dmg / .msi / .AppImage)',
-              icon: Package,
-              cmd: 'npm run build && npx @tauri-apps/cli build',
-            },
-            {
-              id: 'electron',
-              title: 'Electron Desktop',
-              icon: Package,
-              cmd: 'npm run build && npx electron-builder --mac --win --linux',
-            },
-            {
-              id: 'docker',
-              title: 'Docker Compose',
-              icon: HardDrive,
-              cmd: 'docker compose up -d --build',
-            },
-          ].map((b) => {
-            const Icon = b.icon;
-            return (
-              <div
-                key={b.id}
-                className={`p-4 ${cardRadius} bg-white/[0.04] space-y-2.5`}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-xs font-semibold text-white">
-                    <Icon className="w-3.5 h-3.5" style={{ color: palette.vibrant }} />
-                    <span>{b.title}</span>
-                  </div>
-                  <button
-                    onClick={() => copyCommand(b.id, b.cmd)}
-                    className={`px-2 py-1 ${pillRadius} bg-white/[0.07] hover:bg-white/[0.14] text-[10px] font-mono text-white/70 flex items-center gap-1`}
-                  >
-                    {copiedCmd === b.id ? (
-                      <>
-                        <Check className="w-3 h-3 text-emerald-400" />
-                        <span>Copied</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3 h-3" />
-                        <span>Copy</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-                <pre className="p-2.5 rounded-lg bg-black/50 text-[11px] font-mono text-emerald-300 overflow-x-auto">
-                  {b.cmd}
-                </pre>
-              </div>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 };

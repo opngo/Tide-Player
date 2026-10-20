@@ -7,11 +7,141 @@ import { Readable } from 'stream';
 
 const TIDE_DIR = path.join(os.homedir(), '.tide');
 const TIDE_ALL_JSON = path.join(TIDE_DIR, 'all.json');
+const TIDE_CHAPTERS_JSON = path.join(TIDE_DIR, 'chapters.json');
 
 function ensureTideDir() {
   if (!fs.existsSync(TIDE_DIR)) {
     fs.mkdirSync(TIDE_DIR, { recursive: true });
   }
+}
+
+/**
+ * Formats a book's chapter timings into a clean chapters-only metadata record
+ * for persistence in ~/.tide/chapters.json and <book.folderPath>/chapters.json.
+ */
+function formatChaptersOnlyRecord(book: Record<string, any>) {
+  const bookId = String(book.id || '');
+  const rawChapters = Array.isArray(book.chapters) ? book.chapters : [];
+  const lastEndMs =
+    rawChapters.length > 0 ? Number(rawChapters[rawChapters.length - 1]?.endMs || 0) : 0;
+  const durationMs = Math.max(Number(book.durationMs || 0), lastEndMs);
+
+  return {
+    bookId,
+    title: String(book.title || ''),
+    folderPath: book.folderPath ? String(book.folderPath) : undefined,
+    durationMs,
+    updatedAt: Date.now(),
+    chapters: rawChapters.map((ch: Record<string, any>, idx: number) => {
+      const startMs = Math.max(0, Math.round(Number(ch.startMs || 0)));
+      const endMs = Math.max(startMs, Math.round(Number(ch.endMs || startMs)));
+      return {
+        id: String(ch.id || `${bookId}-ch-${idx + 1}`),
+        index: idx + 1,
+        title: String(ch.title || `Chapter ${idx + 1}`),
+        startMs,
+        endMs,
+        startSec: Number((startMs / 1000).toFixed(3)),
+        endSec: Number((endMs / 1000).toFixed(3)),
+        durationMs: Math.max(0, endMs - startMs),
+      };
+    }),
+  };
+}
+
+function loadTideChaptersJson(): {
+  updatedAt: number;
+  books: Record<string, ReturnType<typeof formatChaptersOnlyRecord>>;
+} {
+  try {
+    ensureTideDir();
+    if (fs.existsSync(TIDE_CHAPTERS_JSON)) {
+      const parsed = JSON.parse(fs.readFileSync(TIDE_CHAPTERS_JSON, 'utf-8'));
+      if (parsed && typeof parsed.books === 'object' && parsed.books !== null) {
+        return parsed;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return { updatedAt: Date.now(), books: {} };
+}
+
+function syncChaptersJsonForBooks(books: Record<string, any>[]) {
+  try {
+    ensureTideDir();
+    const existing = loadTideChaptersJson();
+    const nextBooksMap: Record<string, ReturnType<typeof formatChaptersOnlyRecord>> = {
+      ...existing.books,
+    };
+
+    for (const b of books) {
+      if (!b || !b.id) continue;
+      const record = formatChaptersOnlyRecord(b);
+      nextBooksMap[record.bookId] = record;
+
+      // Also save per-book chapters.json inside the book's folder on disk if present
+      if (b.folderPath && typeof b.folderPath === 'string') {
+        try {
+          if (fs.existsSync(b.folderPath) && fs.statSync(b.folderPath).isDirectory()) {
+            const perBookPath = path.join(b.folderPath, 'chapters.json');
+            const tmpBookPath = `${perBookPath}.tmp`;
+            fs.writeFileSync(tmpBookPath, JSON.stringify(record, null, 2), 'utf-8');
+            fs.renameSync(tmpBookPath, perBookPath);
+          }
+        } catch {
+          // ignore read-only folder errors
+        }
+      }
+    }
+
+    const payload = {
+      updatedAt: Date.now(),
+      books: nextBooksMap,
+    };
+    const tmpGlobal = `${TIDE_CHAPTERS_JSON}.tmp`;
+    fs.writeFileSync(tmpGlobal, JSON.stringify(payload, null, 2), 'utf-8');
+    fs.renameSync(tmpGlobal, TIDE_CHAPTERS_JSON);
+  } catch {
+    // ignore
+  }
+}
+
+function readSavedChaptersForBook(
+  bookDir: string,
+  bookId: string,
+  defaultStreamUrl: string
+): { durationMs: number; chapters: any[] } | null {
+  try {
+    // 1. Check <bookDir>/chapters.json first
+    const localChaptersFile = path.join(bookDir, 'chapters.json');
+    let record: any = null;
+    if (fs.existsSync(localChaptersFile)) {
+      record = JSON.parse(fs.readFileSync(localChaptersFile, 'utf-8'));
+    } else {
+      // 2. Fallback to ~/.tide/chapters.json
+      const globalChapters = loadTideChaptersJson();
+      record = globalChapters.books?.[bookId] || null;
+    }
+
+    if (record && Array.isArray(record.chapters) && record.chapters.length > 0) {
+      const chapters = record.chapters.map((ch: any, idx: number) => ({
+        id: String(ch.id || `${bookId}-ch-${idx + 1}`),
+        title: String(ch.title || `Chapter ${idx + 1}`),
+        startMs: Math.max(0, Math.round(Number(ch.startMs || 0))),
+        endMs: Math.max(0, Math.round(Number(ch.endMs || 0))),
+        streamUrl: defaultStreamUrl,
+      }));
+      const lastEnd = chapters[chapters.length - 1]?.endMs || 0;
+      const durationMs = Math.max(Number(record.durationMs || 0), lastEnd);
+      if (durationMs > 0) {
+        return { durationMs, chapters };
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return null;
 }
 
 /**
@@ -427,6 +557,17 @@ function buildBookFromFolder(bookDir: string, paletteIndex = 0): Record<string, 
     };
   });
 
+  // Restore saved chapter times from <bookDir>/chapters.json or ~/.tide/chapters.json if present
+  const savedCh = readSavedChaptersForBook(
+    bookDir,
+    id,
+    files[0]?.objectUrl || chapters[0]?.streamUrl || ''
+  );
+  if (savedCh) {
+    chapters = savedCh.chapters;
+    cumulativeMs = savedCh.durationMs;
+  }
+
   const palette = makeServerPalette(paletteIndex);
   return {
     id,
@@ -576,6 +717,8 @@ function loadTideJson(): Record<string, any> | null {
       parsed.watchedRoots = watchedRoots;
       parsed.savedAt = Date.now();
       saveTideJson(parsed);
+    } else if (Array.isArray(parsed.books)) {
+      syncChaptersJsonForBooks(parsed.books);
     }
     return parsed;
   } catch {
@@ -588,6 +731,9 @@ function saveTideJson(data: Record<string, any>) {
   const tmpFile = `${TIDE_ALL_JSON}.tmp`;
   fs.writeFileSync(tmpFile, JSON.stringify(data, null, 2), 'utf-8');
   fs.renameSync(tmpFile, TIDE_ALL_JSON);
+  if (Array.isArray(data.books)) {
+    syncChaptersJsonForBooks(data.books);
+  }
 }
 
 function parseSizeToBytes(sizeStr: string, unit: string): number {
@@ -786,6 +932,19 @@ async function resolveAbbDetailAndMagnet(detailUrl: string, mirrorBase: string) 
   };
 }
 
+let currentSmtcCoverPngBuffer: Buffer | null = null;
+let currentSmtcMetadata: {
+  bookId: string;
+  title: string;
+  artist: string;
+  album: string;
+  chapterTitle: string;
+  isPlaying: boolean;
+  positionMs: number;
+  durationMs: number;
+  updatedAt: number;
+} | null = null;
+
 export function tideApiPlugin(): Plugin {
   return {
     name: 'tide-backend-api',
@@ -800,6 +959,60 @@ export function tideApiPlugin(): Plugin {
         const pathname = parsedUrl.pathname;
 
         try {
+          // 00. Windows SMTC & FluentFlyout Cover Art & Metadata Endpoints
+          if (pathname === '/api/smtc/state' && req.method === 'POST') {
+            const body = await readJsonBody(req);
+            if (typeof body.pngDataUrl === 'string' && body.pngDataUrl.startsWith('data:image/png;base64,')) {
+              const b64 = body.pngDataUrl.slice('data:image/png;base64,'.length);
+              currentSmtcCoverPngBuffer = Buffer.from(b64, 'base64');
+            }
+            currentSmtcMetadata = {
+              bookId: String(body.bookId || ''),
+              title: String(body.title || ''),
+              artist: String(body.artist || ''),
+              album: String(body.album || ''),
+              chapterTitle: String(body.chapterTitle || ''),
+              isPlaying: Boolean(body.isPlaying),
+              positionMs: Number(body.positionMs || 0),
+              durationMs: Number(body.durationMs || 0),
+              updatedAt: Date.now(),
+            };
+            return sendJson(res, 200, {
+              ok: true,
+              coverUrl: `/api/smtc/cover.png?v=${currentSmtcMetadata.updatedAt}`,
+              metadata: currentSmtcMetadata,
+            });
+          }
+
+          if (pathname === '/api/smtc/state' && req.method === 'GET') {
+            return sendJson(res, 200, {
+              ok: true,
+              hasCover: Boolean(currentSmtcCoverPngBuffer),
+              metadata: currentSmtcMetadata,
+            });
+          }
+
+          if (pathname === '/api/smtc/cover.png' && req.method === 'GET') {
+            if (currentSmtcCoverPngBuffer) {
+              res.statusCode = 200;
+              res.setHeader('Content-Type', 'image/png');
+              res.setHeader('Content-Length', currentSmtcCoverPngBuffer.length);
+              res.setHeader('Cache-Control', 'no-cache');
+              res.setHeader('Access-Control-Allow-Origin', '*');
+              return res.end(currentSmtcCoverPngBuffer);
+            }
+            const fallbackIcon = path.join(process.cwd(), 'build-resources', 'icon.png');
+            if (fs.existsSync(fallbackIcon)) {
+              const buf = fs.readFileSync(fallbackIcon);
+              res.statusCode = 200;
+              res.setHeader('Content-Type', 'image/png');
+              res.setHeader('Content-Length', buf.length);
+              return res.end(buf);
+            }
+            res.statusCode = 404;
+            return res.end();
+          }
+
           // 0A. Load Persistent Catalog from ~/.tide/all.json
           if (pathname === '/api/library' && req.method === 'GET') {
             const saved = loadTideJson();
@@ -831,6 +1044,37 @@ export function tideApiPlugin(): Plugin {
             return sendJson(res, 200, {
               ok: true,
               filePath: TIDE_ALL_JSON,
+              chaptersFilePath: TIDE_CHAPTERS_JSON,
+            });
+          }
+
+          // 0B-0. Dedicated Chapter Times Metadata (~/.tide/chapters.json & <bookDir>/chapters.json)
+          if (pathname === '/api/chapters' && req.method === 'GET') {
+            const saved = loadTideChaptersJson();
+            return sendJson(res, 200, {
+              filePath: TIDE_CHAPTERS_JSON,
+              data: saved,
+            });
+          }
+
+          if (pathname === '/api/chapters' && req.method === 'POST') {
+            const body = await readJsonBody(req);
+            if (Array.isArray(body.books)) {
+              syncChaptersJsonForBooks(body.books);
+            } else if (body.bookId || body.id) {
+              syncChaptersJsonForBooks([
+                {
+                  id: body.bookId || body.id,
+                  title: body.title || '',
+                  folderPath: body.folderPath,
+                  durationMs: body.durationMs,
+                  chapters: body.chapters || [],
+                },
+              ]);
+            }
+            return sendJson(res, 200, {
+              ok: true,
+              filePath: TIDE_CHAPTERS_JSON,
             });
           }
 

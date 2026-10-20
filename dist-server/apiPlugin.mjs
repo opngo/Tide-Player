@@ -4,10 +4,114 @@ import * as os from "os";
 import { Readable } from "stream";
 const TIDE_DIR = path.join(os.homedir(), ".tide");
 const TIDE_ALL_JSON = path.join(TIDE_DIR, "all.json");
+const TIDE_CHAPTERS_JSON = path.join(TIDE_DIR, "chapters.json");
 function ensureTideDir() {
   if (!fs.existsSync(TIDE_DIR)) {
     fs.mkdirSync(TIDE_DIR, { recursive: true });
   }
+}
+function formatChaptersOnlyRecord(book) {
+  var _a;
+  const bookId = String(book.id || "");
+  const rawChapters = Array.isArray(book.chapters) ? book.chapters : [];
+  const lastEndMs = rawChapters.length > 0 ? Number(((_a = rawChapters[rawChapters.length - 1]) == null ? void 0 : _a.endMs) || 0) : 0;
+  const durationMs = Math.max(Number(book.durationMs || 0), lastEndMs);
+  return {
+    bookId,
+    title: String(book.title || ""),
+    folderPath: book.folderPath ? String(book.folderPath) : void 0,
+    durationMs,
+    updatedAt: Date.now(),
+    chapters: rawChapters.map((ch, idx) => {
+      const startMs = Math.max(0, Math.round(Number(ch.startMs || 0)));
+      const endMs = Math.max(startMs, Math.round(Number(ch.endMs || startMs)));
+      return {
+        id: String(ch.id || `${bookId}-ch-${idx + 1}`),
+        index: idx + 1,
+        title: String(ch.title || `Chapter ${idx + 1}`),
+        startMs,
+        endMs,
+        startSec: Number((startMs / 1e3).toFixed(3)),
+        endSec: Number((endMs / 1e3).toFixed(3)),
+        durationMs: Math.max(0, endMs - startMs)
+      };
+    })
+  };
+}
+function loadTideChaptersJson() {
+  try {
+    ensureTideDir();
+    if (fs.existsSync(TIDE_CHAPTERS_JSON)) {
+      const parsed = JSON.parse(fs.readFileSync(TIDE_CHAPTERS_JSON, "utf-8"));
+      if (parsed && typeof parsed.books === "object" && parsed.books !== null) {
+        return parsed;
+      }
+    }
+  } catch {
+  }
+  return { updatedAt: Date.now(), books: {} };
+}
+function syncChaptersJsonForBooks(books) {
+  try {
+    ensureTideDir();
+    const existing = loadTideChaptersJson();
+    const nextBooksMap = {
+      ...existing.books
+    };
+    for (const b of books) {
+      if (!b || !b.id) continue;
+      const record = formatChaptersOnlyRecord(b);
+      nextBooksMap[record.bookId] = record;
+      if (b.folderPath && typeof b.folderPath === "string") {
+        try {
+          if (fs.existsSync(b.folderPath) && fs.statSync(b.folderPath).isDirectory()) {
+            const perBookPath = path.join(b.folderPath, "chapters.json");
+            const tmpBookPath = `${perBookPath}.tmp`;
+            fs.writeFileSync(tmpBookPath, JSON.stringify(record, null, 2), "utf-8");
+            fs.renameSync(tmpBookPath, perBookPath);
+          }
+        } catch {
+        }
+      }
+    }
+    const payload = {
+      updatedAt: Date.now(),
+      books: nextBooksMap
+    };
+    const tmpGlobal = `${TIDE_CHAPTERS_JSON}.tmp`;
+    fs.writeFileSync(tmpGlobal, JSON.stringify(payload, null, 2), "utf-8");
+    fs.renameSync(tmpGlobal, TIDE_CHAPTERS_JSON);
+  } catch {
+  }
+}
+function readSavedChaptersForBook(bookDir, bookId, defaultStreamUrl) {
+  var _a, _b;
+  try {
+    const localChaptersFile = path.join(bookDir, "chapters.json");
+    let record = null;
+    if (fs.existsSync(localChaptersFile)) {
+      record = JSON.parse(fs.readFileSync(localChaptersFile, "utf-8"));
+    } else {
+      const globalChapters = loadTideChaptersJson();
+      record = ((_a = globalChapters.books) == null ? void 0 : _a[bookId]) || null;
+    }
+    if (record && Array.isArray(record.chapters) && record.chapters.length > 0) {
+      const chapters = record.chapters.map((ch, idx) => ({
+        id: String(ch.id || `${bookId}-ch-${idx + 1}`),
+        title: String(ch.title || `Chapter ${idx + 1}`),
+        startMs: Math.max(0, Math.round(Number(ch.startMs || 0))),
+        endMs: Math.max(0, Math.round(Number(ch.endMs || 0))),
+        streamUrl: defaultStreamUrl
+      }));
+      const lastEnd = ((_b = chapters[chapters.length - 1]) == null ? void 0 : _b.endMs) || 0;
+      const durationMs = Math.max(Number(record.durationMs || 0), lastEnd);
+      if (durationMs > 0) {
+        return { durationMs, chapters };
+      }
+    }
+  } catch {
+  }
+  return null;
 }
 function computeRealAudioPeaksFromFiles(filePaths, numBins = 96) {
   try {
@@ -275,6 +379,7 @@ function parseEmbeddedChaptersFromFile(filePath, bookId, totalDurationMs) {
   return null;
 }
 function buildBookFromFolder(bookDir, paletteIndex = 0) {
+  var _a, _b;
   if (!fs.existsSync(bookDir) || !fs.statSync(bookDir).isDirectory()) return null;
   const entries = fs.readdirSync(bookDir).filter((f) => /\.(mp3|m4b|m4a|mp4|flac|ogg|opus|wav|aac)$/i.test(f)).sort((a, b) => a.localeCompare(b, void 0, { numeric: true, sensitivity: "base" }));
   if (entries.length === 0) return null;
@@ -319,6 +424,15 @@ function buildBookFromFolder(bookDir, paletteIndex = 0) {
       objectUrl: `/api/fs/stream?path=${encodeURIComponent(fullPath)}`
     };
   });
+  const savedCh = readSavedChaptersForBook(
+    bookDir,
+    id,
+    ((_a = files[0]) == null ? void 0 : _a.objectUrl) || ((_b = chapters[0]) == null ? void 0 : _b.streamUrl) || ""
+  );
+  if (savedCh) {
+    chapters = savedCh.chapters;
+    cumulativeMs = savedCh.durationMs;
+  }
   const palette = makeServerPalette(paletteIndex);
   return {
     id,
@@ -447,6 +561,8 @@ function loadTideJson() {
       parsed.watchedRoots = watchedRoots;
       parsed.savedAt = Date.now();
       saveTideJson(parsed);
+    } else if (Array.isArray(parsed.books)) {
+      syncChaptersJsonForBooks(parsed.books);
     }
     return parsed;
   } catch {
@@ -458,6 +574,9 @@ function saveTideJson(data) {
   const tmpFile = `${TIDE_ALL_JSON}.tmp`;
   fs.writeFileSync(tmpFile, JSON.stringify(data, null, 2), "utf-8");
   fs.renameSync(tmpFile, TIDE_ALL_JSON);
+  if (Array.isArray(data.books)) {
+    syncChaptersJsonForBooks(data.books);
+  }
 }
 function parseSizeToBytes(sizeStr, unit) {
   const val = parseFloat(sizeStr);
@@ -602,6 +721,8 @@ async function resolveAbbDetailAndMagnet(detailUrl, mirrorBase) {
     peers
   };
 }
+let currentSmtcCoverPngBuffer = null;
+let currentSmtcMetadata = null;
 function tideApiPlugin() {
   return {
     name: "tide-backend-api",
@@ -615,6 +736,56 @@ function tideApiPlugin() {
         const parsedUrl = new URL(rawUrl, "http://localhost");
         const pathname = parsedUrl.pathname;
         try {
+          if (pathname === "/api/smtc/state" && req.method === "POST") {
+            const body = await readJsonBody(req);
+            if (typeof body.pngDataUrl === "string" && body.pngDataUrl.startsWith("data:image/png;base64,")) {
+              const b64 = body.pngDataUrl.slice("data:image/png;base64,".length);
+              currentSmtcCoverPngBuffer = Buffer.from(b64, "base64");
+            }
+            currentSmtcMetadata = {
+              bookId: String(body.bookId || ""),
+              title: String(body.title || ""),
+              artist: String(body.artist || ""),
+              album: String(body.album || ""),
+              chapterTitle: String(body.chapterTitle || ""),
+              isPlaying: Boolean(body.isPlaying),
+              positionMs: Number(body.positionMs || 0),
+              durationMs: Number(body.durationMs || 0),
+              updatedAt: Date.now()
+            };
+            return sendJson(res, 200, {
+              ok: true,
+              coverUrl: `/api/smtc/cover.png?v=${currentSmtcMetadata.updatedAt}`,
+              metadata: currentSmtcMetadata
+            });
+          }
+          if (pathname === "/api/smtc/state" && req.method === "GET") {
+            return sendJson(res, 200, {
+              ok: true,
+              hasCover: Boolean(currentSmtcCoverPngBuffer),
+              metadata: currentSmtcMetadata
+            });
+          }
+          if (pathname === "/api/smtc/cover.png" && req.method === "GET") {
+            if (currentSmtcCoverPngBuffer) {
+              res.statusCode = 200;
+              res.setHeader("Content-Type", "image/png");
+              res.setHeader("Content-Length", currentSmtcCoverPngBuffer.length);
+              res.setHeader("Cache-Control", "no-cache");
+              res.setHeader("Access-Control-Allow-Origin", "*");
+              return res.end(currentSmtcCoverPngBuffer);
+            }
+            const fallbackIcon = path.join(process.cwd(), "build-resources", "icon.png");
+            if (fs.existsSync(fallbackIcon)) {
+              const buf = fs.readFileSync(fallbackIcon);
+              res.statusCode = 200;
+              res.setHeader("Content-Type", "image/png");
+              res.setHeader("Content-Length", buf.length);
+              return res.end(buf);
+            }
+            res.statusCode = 404;
+            return res.end();
+          }
           if (pathname === "/api/library" && req.method === "GET") {
             const saved = loadTideJson();
             return sendJson(res, 200, {
@@ -642,7 +813,35 @@ function tideApiPlugin() {
             });
             return sendJson(res, 200, {
               ok: true,
-              filePath: TIDE_ALL_JSON
+              filePath: TIDE_ALL_JSON,
+              chaptersFilePath: TIDE_CHAPTERS_JSON
+            });
+          }
+          if (pathname === "/api/chapters" && req.method === "GET") {
+            const saved = loadTideChaptersJson();
+            return sendJson(res, 200, {
+              filePath: TIDE_CHAPTERS_JSON,
+              data: saved
+            });
+          }
+          if (pathname === "/api/chapters" && req.method === "POST") {
+            const body = await readJsonBody(req);
+            if (Array.isArray(body.books)) {
+              syncChaptersJsonForBooks(body.books);
+            } else if (body.bookId || body.id) {
+              syncChaptersJsonForBooks([
+                {
+                  id: body.bookId || body.id,
+                  title: body.title || "",
+                  folderPath: body.folderPath,
+                  durationMs: body.durationMs,
+                  chapters: body.chapters || []
+                }
+              ]);
+            }
+            return sendJson(res, 200, {
+              ok: true,
+              filePath: TIDE_CHAPTERS_JSON
             });
           }
           if (pathname === "/api/library/force-index" && req.method === "POST") {

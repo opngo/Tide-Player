@@ -6,3 +6,6 @@
 /venv
 /.venv
 /uploads
+/release
+/electron
+/dist-server
