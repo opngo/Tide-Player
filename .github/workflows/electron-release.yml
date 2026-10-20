@@ -69,8 +69,6 @@ jobs:
 
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-      ELECTRON_CACHE: ${{ runner.temp }}/electron-cache
-      ELECTRON_BUILDER_CACHE: ${{ runner.temp }}/builder-cache
 
     steps:
       - name: Checkout Repository
@@ -95,6 +93,9 @@ jobs:
         run: npm run build:all
 
       - name: Build Electron Desktop Installers (${{ matrix.platform_name }})
+        env:
+          ELECTRON_CACHE: '${{ runner.temp }}/electron-cache'
+          ELECTRON_BUILDER_CACHE: '${{ runner.temp }}/builder-cache'
         run: ${{ matrix.build_cmd }}
 
       - name: Inspect Generated Release Artifacts
