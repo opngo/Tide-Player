@@ -14,7 +14,7 @@ on:
       create_release:
         description: 'Publish artifacts to a GitHub Release'
         required: false
-        default: 'true'
+        default: true
         type: boolean
 
 permissions:
